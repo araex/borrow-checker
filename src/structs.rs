@@ -8,8 +8,8 @@ struct Transaction {
     paid_by_entity: String,
     currency_iso_4217: String,
     amount: f64,
-    transaction_date: Datetime,
-    splits: Vec<Split>,
+    transaction_datetime_rfc_3339: Datetime,
+    split_ratios: Vec<Split>,
 }
 
 #[derive(Serialize, Deserialize)]
