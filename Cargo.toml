@@ -26,3 +26,6 @@ opt-level = 'z'
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[lints.clippy]
+unwrap_used = "warn"

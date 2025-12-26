@@ -7,6 +7,7 @@ Share expenses with friends to keep track of who owes who. Data of an expense sh
 - [Trunk](https://trunkrs.dev/): `cargo install --locked trunk`
 - **Apple Silicon only** requires manual install of wasm-bindgen: `cargo install --locked wasm-bindgen-cli`
 - [`leptosfmt`](https://github.com/bram209/leptosfmt): `cargo install leptosfmt`
+- clippy: `rustup component add clippy`
 
 ## Auto-Reloading Dev Server
 `trunk serve --port 42069 --open`
