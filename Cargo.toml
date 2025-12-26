@@ -1,5 +1,5 @@
 [package]
-name = "borrow_checker"
+name = "borrow-checker"
 version = "0.1.0"
 edition = "2024"
 
