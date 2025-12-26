@@ -1,9 +1,11 @@
 use std::env;
 use std::fs;
+mod git_adapter;
 mod structs;
 
 #[tauri::command]
 fn list_files_html() -> Result<String, String> {
+    git_adapter::git_backend::get_transactions().ok();
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
     let dir_path = current_dir.to_string_lossy();
 

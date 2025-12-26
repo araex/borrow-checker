@@ -30,9 +30,9 @@ mod tests {
     #[test]
     fn test_parse_transaction_description() {
         let mut test_data1 = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        test_data1.push("data/borrow-checker-testdata/ledgers/39C3/019b5b4f-8077-7c4b-89d4-9380c444ee9d.toml");
-        
-
+        test_data1.push(
+            "data/borrow-checker-testdata/ledgers/39C3/019b5b4f-8077-7c4b-89d4-9380c444ee9d.toml",
+        );
 
         let foo = read_to_string(test_data1).unwrap();
 
