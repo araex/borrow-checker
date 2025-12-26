@@ -1,35 +1,49 @@
-use leptos::prelude::*;
-use leptos_meta::*;
-use leptos_router::{components::*, path};
-
-// Modules
-mod components;
-mod pages;
+use std::env;
+use std::fs;
 mod structs;
 
-// Top-Level pages
-use crate::pages::home::Home;
+#[tauri::command]
+fn list_files_html() -> Result<String, String> {
+    let current_dir = env::current_dir().map_err(|e| e.to_string())?;
+    let dir_path = current_dir.to_string_lossy();
 
-/// An app router which renders the homepage and handles 404's
-#[component]
-pub fn App() -> impl IntoView {
-    // Provides context that manages stylesheets, titles, meta tags, etc.
-    provide_meta_context();
+    let mut entries: Vec<_> = fs::read_dir(&current_dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|entry| entry.ok())
+        .collect();
 
-    view! {
-        <Html attr:lang="en" attr:dir="ltr" attr:data-theme="light" />
+    entries.sort_by_key(|e| e.file_name());
 
-        // sets the document title
-        <Title text="Welcome to Leptos CSR" />
+    let mut html = format!(r#"<p><strong>Directory:</strong> {}</p><ul>"#, dir_path);
 
-        // injects metadata in the <head> of the page
-        <Meta charset="UTF-8" />
-        <Meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-        <Router>
-            <Routes fallback=|| view! { NotFound }>
-                <Route path=path!("/") view=Home />
-            </Routes>
-        </Router>
+    for entry in entries {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let is_dir = entry.metadata().ok().map(|m| m.is_dir()).unwrap_or(false);
+        let icon = if is_dir { "📁" } else { "📄" };
+        html.push_str(&format!(
+            r#"<li><span class="file-icon">{}</span> {}</li>"#,
+            icon, name
+        ));
     }
+
+    html.push_str("</ul>");
+    Ok(html)
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![list_files_html])
+        .setup(|app| {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }

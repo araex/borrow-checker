@@ -1,13 +1,6 @@
-use borrow_checker::App;
-use leptos::prelude::*;
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    _ = console_log::init_with_level(log::Level::Debug);
-    console_error_panic_hook::set_once();
-
-    mount_to_body(|| {
-        view! {
-            <App />
-        }
-    })
+  app_lib::run();
 }

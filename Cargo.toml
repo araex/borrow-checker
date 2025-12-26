@@ -3,31 +3,20 @@ name = "borrow-checker"
 version = "0.1.0"
 edition = "2024"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "app_lib"
+
+[build-dependencies]
+tauri-build = { version = "2.5.3", features = [] }
 
 [dependencies]
-leptos = { version = "0.8", features = ["csr"] }
-leptos_meta = { version = "0.8" }
-leptos_router = { version = "0.8" }
-leptos-use = { version = "0.17", default-features = false, features = ["storage"] }
-console_log = "1"
+serde_json = "1.0"
 log = "0.4"
-console_error_panic_hook = "0.1"
 toml = "0.9"
 serde = "1"
-rational = {version = "1.8", features = ["serde"]}
-
-[dev-dependencies]
-wasm-bindgen = "0.2"
-wasm-bindgen-test = "0.3"
-web-sys = { version = "0.3", features = ["Document", "Window"] }
-
-
-[profile.release]
-opt-level = 'z'
-lto = true
-codegen-units = 1
-panic = "abort"
+rational = {version = "1.8", features = ["serde"] }
+tauri = { version = "2.9.5", features = [] }
+tauri-plugin-log = "2"
 
 [lints.clippy]
 unwrap_used = "warn"
