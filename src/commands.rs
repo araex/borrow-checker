@@ -1,0 +1,41 @@
+use crate::components::Navigation;
+use crate::structs::AppState;
+use uuid::Uuid;
+
+#[tauri::command]
+pub fn render_navigation(state: tauri::State<AppState>) -> Result<String, String> {
+    let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
+    
+    // Use first ledger's name if available, otherwise placeholder
+    let ledger_name = ledgers
+        .first()
+        .map(|l| l.ledger.display_name.clone())
+        .unwrap_or_else(|| "No Ledger".to_string());
+
+    let nav = Navigation::new()
+        .current_ledger(&ledger_name)
+        .build();
+
+    Ok(nav)
+}
+
+#[tauri::command]
+pub fn switch_ledger(ledger_id: String, state: tauri::State<AppState>) -> Result<String, String> {
+    // Parse the ledger_id as UUID and find the matching ledger
+    let uuid = Uuid::parse_str(&ledger_id).map_err(|e| e.to_string())?;
+    
+    let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
+    
+    // Find the ledger with the matching ID
+    let ledger_name = ledgers
+        .iter()
+        .find(|l| l.ledger.id == uuid)
+        .map(|l| l.ledger.display_name.clone())
+        .unwrap_or_else(|| "Unknown Ledger".to_string());
+
+    let nav = Navigation::new()
+        .current_ledger(&ledger_name)
+        .build();
+
+    Ok(nav)
+}

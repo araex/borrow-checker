@@ -21,14 +21,14 @@ fn ensure_tailwind_cli() {
 
     if Path::new(&tailwind_path).exists() {
         println!(
-            "cargo:warning=Tailwind CLI already exists at {}",
+            "cargo:info=Tailwind CLI already exists at {}",
             tailwind_path
         );
         return;
     }
 
     println!(
-        "cargo:warning=Downloading Tailwind CLI from {}",
+        "cargo:info=Downloading Tailwind CLI from {}",
         download_url
     );
 
@@ -87,11 +87,11 @@ fn compile_tailwind() {
     let tailwind_path = format!("bin/{}", executable_name);
 
     if !Path::new(&tailwind_path).exists() {
-        println!("cargo:warning=Tailwind CLI not found, skipping CSS compilation");
+        println!("cargo:info=Tailwind CLI not found, skipping CSS compilation");
         return;
     }
 
-    println!("cargo:warning=Compiling Tailwind CSS");
+    println!("cargo:info=Compiling Tailwind CSS");
 
     let output = Command::new(&tailwind_path)
         .args(&[
@@ -112,7 +112,7 @@ fn compile_tailwind() {
         );
     }
 
-    println!("cargo:warning=Tailwind CSS compiled successfully");
+    println!("cargo:info=Tailwind CSS compiled successfully");
 
     // Tell Cargo to rerun if these files change
     println!("cargo:rerun-if-changed=static/input.css");
