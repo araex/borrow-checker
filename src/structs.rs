@@ -7,6 +7,8 @@ use uuid::Uuid;
 pub struct AppState {
     pub group: Mutex<Group>,
     pub ledgers: Mutex<Vec<LedgerWithTransactions>>,
+    pub current_ledger_id: Mutex<Option<Uuid>>,
+    pub user_id: Uuid,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

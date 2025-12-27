@@ -54,6 +54,9 @@ function callInvoke(el) {
     }
 
     api.settleImmediately(settleInfo.tasks);
+  }).catch((error) => {
+    console.error("Invoke error:", error);
+    api.swap(target, `<div class="text-red-500 p-4">Error: ${error}</div>`, swapSpec);
   });
 }
 

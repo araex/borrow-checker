@@ -1,39 +1,6 @@
-use std::env;
-use std::fs;
 mod commands;
 mod components;
 mod structs;
-
-#[tauri::command]
-fn list_files_html() -> Result<String, String> {
-    let current_dir = env::current_dir().map_err(|e| e.to_string())?;
-    let dir_path = current_dir.to_string_lossy();
-
-    let mut entries: Vec<_> = fs::read_dir(&current_dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|entry| entry.ok())
-        .collect();
-
-    entries.sort_by_key(|e| e.file_name());
-
-    let mut html = format!(
-        r#"<div><p class="text-gray-400 text-sm mb-4 font-mono"><strong class="text-gray-200">Directory:</strong> {}</p><ul class="space-y-1">"#,
-        dir_path
-    );
-
-    for entry in entries {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let is_dir = entry.metadata().ok().map(|m| m.is_dir()).unwrap_or(false);
-        let icon = if is_dir { "📁" } else { "📄" };
-        html.push_str(&format!(
-            r#"<li class="text-gray-300"><span class="mr-2">{}</span>{}</li>"#,
-            icon, name
-        ));
-    }
-
-    html.push_str("</ul></div>");
-    Ok(html)
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -95,18 +62,23 @@ pub fn run() {
     };
 
     let test_ledger_with_transactions = LedgerWithTransactions {
-        ledger: test_ledger,
+        ledger: test_ledger.clone(),
         transactions: vec![test_transaction],
     };
+
+    let ledger_id = test_ledger.id;
+    let user_id = test_group.entities[0].id;
 
     tauri::Builder::default()
         .manage(structs::AppState {
             group: std::sync::Mutex::new(test_group),
             ledgers: std::sync::Mutex::new(vec![test_ledger_with_transactions]),
+            current_ledger_id: std::sync::Mutex::new(Some(ledger_id)),
+            user_id,
         })
         .invoke_handler(tauri::generate_handler![
-            list_files_html,
             commands::render_navigation,
+            commands::render_transactions,
             commands::switch_ledger
         ])
         .setup(|app| {
