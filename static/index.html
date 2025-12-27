@@ -8,18 +8,29 @@
         <script src="tauri-htmx-ext.js" defer></script>
         <script src="htmx.2.0.8.min.js" defer></script>
     </head>
-    <body class="bg-gray-50 min-h-screen" hx-ext="tauri">
-        <div class="mx-auto">
-            <h1 class="text-xl font-bold">Borrow Checker</h1>
-            <button
-                id="loadFilesBtn"
-                class="bg-blue-600 hover:bg-blue-700 text-white font-medium p-2 rounded-lg transition-colors duration-150 ease-in-out"
+    <body
+        class="bg-zinc-950 text-gray-200 min-h-screen flex justify-center items-center font-sans relative"
+        hx-ext="tauri"
+    >
+        <!-- Grain texture overlay on body background -->
+        <div
+            class="fixed inset-0 pointer-events-none opacity-10 bg-[url('/noise.svg')] -z-10"
+        ></div>
+
+        <div
+            class="flex flex-col w-[calc(100vw-48px)] max-w-[1400px] h-[calc(100vh-48px)] bg-black border border-zinc-700 shadow-[20px_20px_60px_#050505,-5px_-5px_20px_rgba(255,255,255,0.02)] relative overflow-hidden"
+        >
+            <!-- Rust-rendered content will be swapped in here -->
+            <main
+                id="main-content"
+                class="relative overflow-y-auto flex flex-col z-10 p-2"
                 hx-tauri-invoke="list_files_html"
-                hx-target="#content"
+                hx-trigger="load"
             >
-                List Files
-            </button>
-            <div id="content"></div>
+                <div class="flex items-center justify-center h-full">
+                    <p class="font-mono text-gray-600 text-sm">Loading...</p>
+                </div>
+            </main>
         </div>
     </body>
 </html>
