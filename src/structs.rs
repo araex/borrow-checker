@@ -54,18 +54,18 @@ pub struct Split {
 
 #[cfg(test)]
 mod tests {
-    
+
     use std::{
         fs::read_to_string,
         path::{Path, PathBuf},
     };
-    
-    use test_context::{test_context, TestContext};
+
+    use test_context::{TestContext, test_context};
 
     use super::*;
     struct TestTransactions {
         flight: Transaction,
-        ticket: Transaction,   
+        ticket: Transaction,
     }
 
     impl TestContext for TestTransactions {
@@ -80,7 +80,7 @@ mod tests {
     fn read_toml(toml_relative_path: &str) -> Result<String, std::io::Error> {
         let mut test_data_full_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         test_data_full_path.push(toml_relative_path);
-       
+
         read_to_string(test_data_full_path)
     }
 
@@ -130,8 +130,17 @@ mod tests {
         let content = read_to_string(test_data).unwrap();
         let group: Group = toml::from_str(&content).unwrap();
 
-        assert_eq!(group.entities[0].id.to_string(), "c8744a29-7ed0-447a-af5a-51e4ad291d1d");
-        assert_eq!(group.entities[1].id.to_string(), "3abaaf40-a35a-488d-8ef2-0184c8c5f3c3");
-        assert_eq!(group.entities[2].id.to_string(), "92c0a0fc-aa86-4922-ab1f-7b9326720177");
+        assert_eq!(
+            group.entities[0].id.to_string(),
+            "c8744a29-7ed0-447a-af5a-51e4ad291d1d"
+        );
+        assert_eq!(
+            group.entities[1].id.to_string(),
+            "3abaaf40-a35a-488d-8ef2-0184c8c5f3c3"
+        );
+        assert_eq!(
+            group.entities[2].id.to_string(),
+            "92c0a0fc-aa86-4922-ab1f-7b9326720177"
+        );
     }
 }

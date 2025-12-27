@@ -57,7 +57,7 @@ pub mod git_adapter {
     }
 
     pub fn get_transactions(
-        repo: Repository,
+        repo: &Repository,
         ledger_path: &Path,
     ) -> Result<Vec<structs::Transaction>, &'static str> {
         // Get the repository root tree (prefers refs/heads/main, falls back to HEAD)
