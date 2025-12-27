@@ -1,5 +1,7 @@
 use std::env;
 use std::fs;
+mod commands;
+mod components;
 mod structs;
 
 #[tauri::command]
@@ -36,7 +38,16 @@ fn list_files_html() -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![list_files_html])
+        .manage(structs::AppState {
+            current_group: std::sync::Mutex::new("CCC Events".to_string()),
+            current_ledger: std::sync::Mutex::new("39C3".to_string()),
+        })
+        .invoke_handler(tauri::generate_handler![
+            list_files_html,
+            commands::render_navigation,
+            commands::switch_group,
+            commands::switch_ledger
+        ])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

@@ -1,6 +1,12 @@
 use rational::Rational;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use toml::value::Datetime;
+
+pub struct AppState {
+    pub current_group: Mutex<String>,
+    pub current_ledger: Mutex<String>,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Transaction {
