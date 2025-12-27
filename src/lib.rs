@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 mod commands;
 mod components;
-mod git_adapters;
+mod git_adapter;
 mod structs;
 
 #[tauri::command]
@@ -39,11 +39,11 @@ fn list_files_html() -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    use structs::*;
-    use uuid::Uuid;
     use rational::Rational;
-    use toml::value::Datetime;
     use std::str::FromStr;
+    use structs::*;
+    use toml::value::Datetime;
+    use uuid::Uuid;
 
     // Initialize test group with entities
     let test_group = Group {

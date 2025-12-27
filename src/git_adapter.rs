@@ -73,17 +73,57 @@ pub mod git_adapter {
 
         // Example: iterate entries in the subtree and print them.
         // Replace this with your parsing logic to build Transaction objects.
-        println!("Entries in ledger subtree (ledgers/39C3):");
+        // println!("Entries in ledger subtree (ledgers/39C3):");
+        // for entry in ledger_tree.iter() {
+        //     println!(
+        //         "- name: {:<30} kind: {:?} id: {}",
+        //         entry.name().unwrap_or(""),
+        //         entry.kind(),
+        //         entry.id()
+        //     );
+        // }
+
+        // Collect transactions parsed from ledger files (skip hidden files)
+        let mut transactions: Vec<structs::Transaction> = Vec::new();
+
         for entry in ledger_tree.iter() {
-            println!(
-                "- name: {:<30} kind: {:?} id: {}",
-                entry.name().unwrap_or(""),
-                entry.kind(),
-                entry.id()
-            );
+            let name = match entry.name() {
+                Some(n) => n,
+                None => {
+                    eprintln!("skipping entry with no name");
+                    continue;
+                }
+            };
+
+            // Filter hidden files (names starting with '.')
+            if name.starts_with('.') {
+                continue;
+            }
+            match entry.kind() {
+                Some(ObjectType::Blob) => match repo.find_blob(entry.id()) {
+                    Ok(blob) => match str::from_utf8(blob.content()) {
+                        Ok(text) => match toml::from_str::<structs::Transaction>(text) {
+                            Ok(tx) => transactions.push(tx),
+                            Err(e) => eprintln!("failed to parse {}: {}", name, e),
+                        },
+                        Err(e) => eprintln!("blob {} is not valid utf8: {}", name, e),
+                    },
+                    Err(e) => eprintln!("failed to read blob {}: {}", name, e),
+                },
+                Some(kind) => {
+                    eprintln!("skipping non-blob entry {}: {:?}", name, kind);
+                }
+                None => {
+                    eprintln!("entry {} has no object type", name);
+                }
+            }
         }
 
-        // TODO: parse ledger_tree entries into Vec<structs::Transaction>
-        Err("Not implemented")
+        println!("Transactions: ({})", transactions.len());
+        for t in &transactions {
+            println!("Desc: {}", t.description);
+        }
+
+        Ok(transactions)
     }
 }
