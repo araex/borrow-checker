@@ -1,5 +1,7 @@
 use crate::structs::{Entity, Group, Ledger, LedgerWithTransactions, Split, Transaction};
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt;
 use std::path::Path;
 use uuid::Uuid;
 
@@ -9,9 +11,90 @@ use uuid::Uuid;
 
 /// Errors that can occur in persistence operations
 #[derive(Debug)]
-pub enum PersistenceError {}
+pub enum PersistenceError {
+    /// Could not open repository at the given path (message contains path + detail)
+    RepoOpen(String),
 
-/// Errors that can occur in business logic operations
+    /// Generic Git error (stringified message)
+    Git(String),
+
+    /// I/O error (stringified)
+    Io(String),
+
+    /// UTF-8 decoding error (stringified)
+    Utf8(String),
+
+    /// TOML deserialization error (stringified)
+    Toml(String),
+
+    /// Requested object not found (e.g. ledger id not found)
+    NotFound(String),
+
+    /// An object in the tree had an unexpected object type
+    InvalidObjectType(String),
+
+    /// Operation is not supported by this persistence implementation
+    UnsupportedOperation(String),
+
+    /// Ledger parsing failed for a specific ledger marker
+    ParseLedger {
+        ledger_name: String,
+        message: String,
+    },
+
+    /// Generic other error with free-form message
+    Other(String),
+}
+
+impl fmt::Display for PersistenceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PersistenceError::RepoOpen(s) => write!(f, "Repo open error: {}", s),
+            PersistenceError::Git(s) => write!(f, "Git error: {}", s),
+            PersistenceError::Io(s) => write!(f, "IO error: {}", s),
+            PersistenceError::Utf8(s) => write!(f, "UTF-8 decode error: {}", s),
+            PersistenceError::Toml(s) => write!(f, "TOML parse error: {}", s),
+            PersistenceError::NotFound(s) => write!(f, "Not found: {}", s),
+            PersistenceError::InvalidObjectType(s) => write!(f, "Invalid object type: {}", s),
+            PersistenceError::UnsupportedOperation(s) => write!(f, "Unsupported operation: {}", s),
+            PersistenceError::ParseLedger {
+                ledger_name,
+                message,
+            } => {
+                write!(f, "Failed to parse ledger '{}': {}", ledger_name, message)
+            }
+            PersistenceError::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl Error for PersistenceError {}
+
+// Conversion helpers (implement in traits to make them easily usable by implementations)
+impl From<std::io::Error> for PersistenceError {
+    fn from(e: std::io::Error) -> Self {
+        PersistenceError::Io(format!("{}", e))
+    }
+}
+
+impl From<std::str::Utf8Error> for PersistenceError {
+    fn from(e: std::str::Utf8Error) -> Self {
+        PersistenceError::Utf8(format!("{}", e))
+    }
+}
+
+impl From<toml::de::Error> for PersistenceError {
+    fn from(e: toml::de::Error) -> Self {
+        PersistenceError::Toml(format!("{}", e))
+    }
+}
+
+impl From<git2::Error> for PersistenceError {
+    fn from(e: git2::Error) -> Self {
+        PersistenceError::Git(format!("{}", e))
+    }
+}
+
 #[derive(Debug)]
 pub enum BusinessLogicError {}
 

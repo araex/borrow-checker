@@ -1,52 +1,32 @@
 use std::env;
 use std::path::Path;
 
+use crate::git_adapter::GitPersistence;
+use crate::traits::PersistenceRepository;
+
 mod commands;
 mod components;
 mod git_adapter;
 mod structs;
-
-//@todo do lazy loading of transactions
-fn load_ledgers() -> Vec<structs::LedgerWithTransactions> {
-    let repo = git_adapter::git_adapter::get_repo();
-    let mut ledgers_with_transactions: Vec<structs::LedgerWithTransactions> = Vec::new();
-
-    match git_adapter::git_adapter::list_ledgers(&repo, Path::new("ledgers")) {
-        Ok(ledgers) => {
-            for (path, ledger) in ledgers {
-                println!("ledger at {} : {}", path.display(), ledger.display_name);
-
-                let item = structs::LedgerWithTransactions {
-                    ledger: ledger,
-                    transactions: git_adapter::git_adapter::get_transactions(&repo, &path).unwrap(),
-                };
-
-                ledgers_with_transactions.push(item);
-                // path: PathBuf, ledger: structs::Ledger (owned)
-            }
-        }
-        Err(e) => eprintln!("error: {}", e),
-    }
-
-    return ledgers_with_transactions;
-}
+mod traits;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use structs::*;
     use uuid::Uuid;
 
-    let ledgers = load_ledgers();
-    let group = git_adapter::git_adapter::get_group(&git_adapter::git_adapter::get_repo()).unwrap();
+    let persistence = GitPersistence::new(None).unwrap();
+    let group = persistence.load_group().unwrap();
+    let ledgers = persistence.list_ledgers().unwrap();
 
     // @todo load from config
-    let ledger_id = ledgers[0].ledger.id;
+    let ledger_id = ledgers[0].id;
     let user_id = group.entities[0].id;
 
     tauri::Builder::default()
         .manage(structs::AppState {
             group: std::sync::Mutex::new(group),
-            ledgers: std::sync::Mutex::new(ledgers),
+            ledgers: std::sync::Mutex::new(Vec::new()),
             current_ledger_id: std::sync::Mutex::new(Some(ledger_id)),
             user_id,
         })
