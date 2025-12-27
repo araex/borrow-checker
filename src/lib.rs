@@ -1,8 +1,6 @@
 use std::env;
 use std::path::Path;
 
-use crate::structs::LedgerWithTransactions;
-
 mod commands;
 mod components;
 mod git_adapter;

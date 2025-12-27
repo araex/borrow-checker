@@ -57,7 +57,7 @@ mod tests {
 
     use std::{
         fs::read_to_string,
-        path::{Path, PathBuf},
+        path::PathBuf,
     };
 
     use test_context::{TestContext, test_context};
