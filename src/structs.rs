@@ -5,42 +5,48 @@ use toml::value::Datetime;
 use uuid::Uuid;
 
 pub struct AppState {
-    pub current_group: Mutex<String>,
-    pub current_ledger: Mutex<String>,
+    pub group: Mutex<Group>,
+    pub ledgers: Mutex<Vec<LedgerWithTransactions>>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Group {
-    entities: Vec<Entity>,
+    pub entities: Vec<Entity>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Entity {
-    id: Uuid,
-    display_name: String,
+    pub id: Uuid,
+    pub display_name: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Ledger {
-    id: Uuid,
-    display_name: String,
-    participants: Vec<Uuid>,
+    pub id: Uuid,
+    pub display_name: String,
+    pub participants: Vec<Uuid>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone)]
+pub struct LedgerWithTransactions {
+    pub ledger: Ledger,
+    pub transactions: Vec<Transaction>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Transaction {
-    description: String,
-    paid_by_entity: Uuid,
-    currency_iso_4217: String,
-    amount: f64,
-    transaction_datetime_rfc_3339: Datetime,
-    split_ratios: Vec<Split>,
+    pub description: String,
+    pub paid_by_entity: Uuid,
+    pub currency_iso_4217: String,
+    pub amount: f64,
+    pub transaction_datetime_rfc_3339: Datetime,
+    pub split_ratios: Vec<Split>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Split {
-    entity_id: Uuid,
-    ratio: Rational,
+    pub entity_id: Uuid,
+    pub ratio: Rational,
 }
 
 #[cfg(test)]

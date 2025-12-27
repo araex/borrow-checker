@@ -30,7 +30,7 @@ impl Navigation {
     pub fn build(self) -> String {
         let group_display = self
             .current_group
-            .unwrap_or_else(|| "Select Group".to_string());
+            .unwrap_or_else(|| "No Group".to_string());
         let ledger_display = self
             .current_ledger
             .unwrap_or_else(|| "Select Ledger".to_string());
@@ -44,14 +44,8 @@ impl Navigation {
                 }
 
                 div class="breadcrumb flex items-center gap-4 font-mono text-sm" {
-                    select
-                        class="bg-zinc-800 text-gray-200 border border-zinc-700 px-4 py-2 cursor-pointer transition-colors hover:text-orange-500 hover:border-orange-500"
-                        name="group_id"
-                        hx-tauri-invoke="switch_group"
-                        hx-target="#main-content" {
-                        option selected { (group_display) }
-                    }
-
+                    span class="text-gray-200" { (group_display) }
+                    
                     span class="text-gray-600" { "/" }
 
                     select
