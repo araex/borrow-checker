@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 pub struct AppState {
     pub group: Mutex<Group>,
-    pub ledgers: Mutex<Vec<LedgerWithTransactions>>,
+    pub ledgers: Mutex<Vec<Ledger>>,
+    pub transactions: Mutex<Vec<Transaction>>,
     pub current_ledger_id: Mutex<Option<Uuid>>,
     pub user_id: Uuid,
 }
@@ -55,10 +56,7 @@ pub struct Split {
 #[cfg(test)]
 mod tests {
 
-    use std::{
-        fs::read_to_string,
-        path::PathBuf,
-    };
+    use std::{fs::read_to_string, path::PathBuf};
 
     use test_context::{TestContext, test_context};
 

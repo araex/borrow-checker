@@ -22,11 +22,13 @@ pub fn run() {
     // @todo load from config
     let ledger_id = ledgers[0].id;
     let user_id = group.entities[0].id;
+    let transactions = persistence.list_transactions(ledger_id).unwrap();
 
     tauri::Builder::default()
         .manage(structs::AppState {
             group: std::sync::Mutex::new(group),
-            ledgers: std::sync::Mutex::new(Vec::new()),
+            ledgers: std::sync::Mutex::new(ledgers),
+            transactions: std::sync::Mutex::new(transactions),
             current_ledger_id: std::sync::Mutex::new(Some(ledger_id)),
             user_id,
         })

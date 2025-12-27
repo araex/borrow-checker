@@ -11,7 +11,7 @@ pub fn render_header(state: tauri::State<AppState>) -> Result<String, String> {
     // Use first ledger's name if available, otherwise placeholder
     let ledger_name = ledgers
         .first()
-        .map(|l| l.ledger.display_name.clone())
+        .map(|l| l.display_name.clone())
         .unwrap_or_else(|| "No Ledger".to_string());
 
     // Get current user's display name
@@ -42,6 +42,7 @@ pub fn render_header(state: tauri::State<AppState>) -> Result<String, String> {
 #[tauri::command]
 pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, String> {
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
+    let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
 
     // Get current ledger from state
@@ -49,16 +50,16 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
     let user_uuid = state.user_id;
 
     // Find the ledger
-    let ledger_with_txns = ledgers
+    let ledger = ledgers
         .iter()
-        .find(|l| l.ledger.id == ledger_uuid)
+        .find(|l| l.id == ledger_uuid)
         .ok_or_else(|| "Selected ledger not found".to_string())?;
 
     // Calculate per-user balances from all transactions
     let mut balances: std::collections::HashMap<Uuid, f64> = std::collections::HashMap::new();
     let mut currency = String::from("USD");
 
-    for txn in &ledger_with_txns.transactions {
+    for txn in transactions.iter() {
         // Use the currency from the first transaction
         if currency == "USD" {
             currency = txn.currency_iso_4217.clone();
@@ -79,7 +80,8 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
             // User is owed by each person in the split
             for split in &txn.split_ratios {
                 if split.entity_id != user_uuid {
-                    let other_share = txn.amount * (split.ratio.numerator() as f64 / split.ratio.denominator() as f64);
+                    let other_share = txn.amount
+                        * (split.ratio.numerator() as f64 / split.ratio.denominator() as f64);
                     *balances.entry(split.entity_id).or_insert(0.0) += other_share;
                 }
             }
@@ -91,7 +93,7 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
 
     // Get the group entities to map UUIDs to names
     let group = state.group.lock().map_err(|e| e.to_string())?;
-    
+
     // Convert HashMap to Vec of (name, amount) pairs, filtering out the current user
     let mut balance_list: Vec<(String, f64)> = balances
         .into_iter()
@@ -104,18 +106,22 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
                 .map(|e| (e.display_name.clone(), amount))
         })
         .collect();
-    
+
     // Sort by absolute amount descending
-    balance_list.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap_or(std::cmp::Ordering::Equal));
+    balance_list.sort_by(|a, b| {
+        b.1.abs()
+            .partial_cmp(&a.1.abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Collect all available ledgers for the dropdown
     let available_ledgers: Vec<(String, String)> = ledgers
         .iter()
-        .map(|l| (l.ledger.id.to_string(), l.ledger.display_name.clone()))
+        .map(|l| (l.id.to_string(), l.display_name.clone()))
         .collect();
 
     let header = LedgerHeader::new()
-        .ledger_name(&ledger_with_txns.ledger.display_name)
+        .ledger_name(&ledger.display_name)
         .balances(balance_list)
         .currency(&currency)
         .ledgers(available_ledgers)
@@ -136,8 +142,8 @@ pub fn switch_ledger(ledger_id: String, state: tauri::State<AppState>) -> Result
     // Find the ledger with the matching ID
     let ledger_name = ledgers
         .iter()
-        .find(|l| l.ledger.id == uuid)
-        .map(|l| l.ledger.display_name.clone())
+        .find(|l| l.id == uuid)
+        .map(|l| l.display_name.clone())
         .unwrap_or_else(|| "Unknown Ledger".to_string());
 
     // Get current user's display name
@@ -170,6 +176,7 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
+    let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
 
     // Get current ledger and user from state
     let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
@@ -178,13 +185,13 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
     // Find the ledger
     let ledger_with_txns = ledgers
         .iter()
-        .find(|l| l.ledger.id == ledger_uuid)
+        .find(|l| l.id == ledger_uuid)
         .ok_or_else(|| "Selected ledger not found".to_string())?;
 
     let mut html = String::from(r#"<section id="expense-list" class="flex flex-col">"#);
 
     // Render each transaction
-    for txn in &ledger_with_txns.transactions {
+    for txn in transactions.iter() {
         // Find the payer's name
         let payer_name = group
             .entities
@@ -241,36 +248,36 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
 #[tauri::command]
 pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<String, String> {
     use crate::components::ExpenseForm;
-    
+
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
-    
+    let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
+
     let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
-    
+
     // Parse expense ID
     let expense_uuid = Uuid::parse_str(&expense_id).map_err(|e| e.to_string())?;
-    
+
     // Find the ledger
-    let ledger_with_txns = ledgers
+    let ledger = ledgers
         .iter()
-        .find(|l| l.ledger.id == ledger_uuid)
+        .find(|l| l.id == ledger_uuid)
         .ok_or_else(|| "Selected ledger not found".to_string())?;
-    
+
     // Find the transaction
-    let txn = ledger_with_txns
-        .transactions
+    let txn = transactions
         .iter()
         .find(|t| t.id == expense_uuid)
         .ok_or_else(|| "Transaction not found".to_string())?;
-    
+
     // Get available participants from the group
     let participants: Vec<(String, String)> = group
         .entities
         .iter()
         .map(|e| (e.id.to_string(), e.display_name.clone()))
         .collect();
-    
+
     // Build the expense form
     let form = ExpenseForm::new()
         .expense_id(expense_id)
@@ -282,6 +289,6 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
         .split_ratios(txn.split_ratios.clone())
         .participants(participants)
         .build();
-    
+
     Ok(form)
 }
