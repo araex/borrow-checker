@@ -1,3 +1,4 @@
+use crate::structs::Split;
 /// UI Components for Borrow Checker
 ///
 /// All components use the builder pattern for flexible construction
@@ -155,10 +156,13 @@ impl Transaction {
         };
 
         html! {
-            div
-                class="expense-item group relative grid grid-cols-[1fr_auto_auto] items-center px-12 py-6 border-b border-zinc-700 cursor-pointer transition-colors hover:bg-zinc-900"
-                hx-tauri-invoke=(format!("get_expense:{}", expense_id))
-                hx-target="#main-content" {
+            button
+                class="expense-item group relative grid grid-cols-[1fr_auto_auto] items-center px-12 py-6 border-b border-zinc-700 cursor-pointer transition-colors hover:bg-zinc-900 w-full text-left"
+                type="button"
+                name="expenseId"
+                value=(expense_id)
+                hx-tauri-invoke="get_expense"
+                hx-target="#expense-list" {
 
                 // Hover background effect
                 div class="absolute inset-0 bg-gradient-to-r from-transparent to-white/[0.03] scale-x-0 origin-left transition-transform duration-600 ease-out group-hover:scale-x-100 pointer-events-none" {}
@@ -304,6 +308,261 @@ impl LedgerHeader {
 }
 
 impl Default for LedgerHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct ExpenseForm {
+    expense_id: Option<String>,
+    description: String,
+    paid_by: String,
+    amount: f64,
+    currency: String,
+    date: String,
+    split_ratios: Vec<Split>,
+    participants: Vec<(String, String)>, // (id, display_name) pairs
+}
+
+impl ExpenseForm {
+    pub fn new() -> Self {
+        Self {
+            expense_id: None,
+            description: String::new(),
+            paid_by: String::new(),
+            amount: 0.0,
+            currency: String::from("USD"),
+            date: String::new(),
+            split_ratios: Vec::new(),
+            participants: Vec::new(),
+        }
+    }
+
+    pub fn expense_id(mut self, id: impl Into<String>) -> Self {
+        self.expense_id = Some(id.into());
+        self
+    }
+
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = description.into();
+        self
+    }
+
+    pub fn paid_by(mut self, paid_by: impl Into<String>) -> Self {
+        self.paid_by = paid_by.into();
+        self
+    }
+
+    pub fn amount(mut self, amount: f64) -> Self {
+        self.amount = amount;
+        self
+    }
+
+    pub fn currency(mut self, currency: impl Into<String>) -> Self {
+        self.currency = currency.into();
+        self
+    }
+
+    pub fn date(mut self, date: impl Into<String>) -> Self {
+        self.date = date.into();
+        self
+    }
+
+    pub fn split_ratios(mut self, splits: Vec<Split>) -> Self {
+        self.split_ratios = splits;
+        self
+    }
+
+    pub fn participants(mut self, participants: Vec<(String, String)>) -> Self {
+        self.participants = participants;
+        self
+    }
+
+    pub fn build(self) -> String {
+        let is_edit = self.expense_id.is_some();
+        let form_title = if is_edit {
+            "Edit Expense"
+        } else {
+            "Add Expense"
+        };
+        let submit_label = if is_edit {
+            "Update Expense"
+        } else {
+            "Create Expense"
+        };
+
+        // Extract date only (without time) for the date input
+        let date_only = self.date.split('T').next().unwrap_or(&self.date);
+
+        html! {
+            div class="flex" style="height: calc(100vh - 280px);" {
+                // Rotated title sidebar - sticky positioning
+                div class="sticky flex flex-col items-center justify-end bg-gradient-to-b from-zinc-900 to-zinc-950 border-r border-zinc-700" {
+                    h2 class="text-2xl font-bold tracking-[0.2em] uppercase whitespace-nowrap origin-center text-zinc-500"
+                        style="font-family: 'Space Grotesk', sans-serif; writing-mode: vertical-rl; transform: rotate(180deg); padding: 16px 12px;" {
+                        (form_title)
+                    }
+                }
+
+                // Form content - scrollable
+                div class="flex-1 px-8 py-6 overflow-y-auto" {
+                    // Back button
+                    div class="mb-6" {
+                        button
+                            class="text-zinc-400 hover:text-orange-500 flex items-center gap-2 transition-colors"
+                            hx-tauri-invoke="render_transactions"
+                            hx-target="#expense-list" {
+                            svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" {
+                                path d="M15 18l-6-6 6-6" {}
+                            }
+                            span { "Back to Transactions" }
+                        }
+                    }
+
+                    // Form
+                    form class="space-y-6" {
+                    // Description field
+                    div class="form-group" {
+                        label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="description" {
+                            "Description"
+                        }
+                        input
+                            type="text"
+                            name="description"
+                            id="description"
+                            value=(self.description)
+                            required
+                            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors";
+                    }
+
+                    // Amount and Currency
+                    div class="grid grid-cols-2 gap-4" {
+                        div class="form-group" {
+                            label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="amount" {
+                                "Amount"
+                            }
+                            input
+                                type="number"
+                                name="amount"
+                                id="amount"
+                                value=(format!("{:.2}", self.amount))
+                                step="0.01"
+                                min="0"
+                                required
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors";
+                        }
+
+                        div class="form-group" {
+                            label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="currency" {
+                                "Currency"
+                            }
+                            select
+                                name="currency"
+                                id="currency"
+                                required
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors" {
+                                option value="USD" selected[self.currency == "USD"] { "USD" }
+                                option value="EUR" selected[self.currency == "EUR"] { "EUR" }
+                                option value="GBP" selected[self.currency == "GBP"] { "GBP" }
+                                option value="CHF" selected[self.currency == "CHF"] { "CHF" }
+                                option value="JPY" selected[self.currency == "JPY"] { "JPY" }
+                            }
+                        }
+                    }
+
+                    // Paid by and Date
+                    div class="grid grid-cols-2 gap-4" {
+                        div class="form-group" {
+                            label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="paid_by" {
+                                "Paid By"
+                            }
+                            select
+                                name="paid_by"
+                                id="paid_by"
+                                required
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors" {
+                                @for (id, name) in &self.participants {
+                                    option value=(id) selected[id == &self.paid_by] {
+                                        (name)
+                                    }
+                                }
+                            }
+                        }
+
+                        div class="form-group" {
+                            label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="date" {
+                                "Date"
+                            }
+                            input
+                                type="date"
+                                name="date"
+                                id="date"
+                                value=(date_only)
+                                required
+                                class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors";
+                        }
+                    }
+
+                    // Split ratios section
+                    div class="form-group" {
+                        label class="block text-sm font-mono text-zinc-400 uppercase mb-3" {
+                            "Split Between"
+                        }
+                        div class="space-y-2" {
+                            @for (participant_id, participant_name) in &self.participants {
+                                @let split = self.split_ratios.iter().find(|s| s.entity_id.to_string() == *participant_id);
+                                @let ratio_value = split.map(|s| format!("{}/{}", s.ratio.numerator(), s.ratio.denominator())).unwrap_or_else(|| "0/1".to_string());
+                                @let is_included = split.is_some();
+
+                                div class="flex items-center gap-4 bg-zinc-800 border border-zinc-700 rounded px-4 py-3" {
+                                    input
+                                        type="checkbox"
+                                        name=(format!("split_include_{}", participant_id))
+                                        id=(format!("split_include_{}", participant_id))
+                                        checked[is_included]
+                                        class="w-4 h-4 accent-orange-500";
+
+                                    label for=(format!("split_include_{}", participant_id)) class="flex-1 text-white" {
+                                        (participant_name)
+                                    }
+
+                                    input
+                                        type="text"
+                                        name=(format!("split_ratio_{}", participant_id))
+                                        placeholder="1/1"
+                                        value=(ratio_value)
+                                        class="w-24 bg-zinc-900 border border-zinc-600 rounded px-3 py-1 text-white text-sm focus:border-orange-500 focus:outline-none";
+                                }
+                            }
+                        }
+                    }
+
+                    // Action buttons
+                    div class="flex gap-4 pt-4" {
+                        button
+                            type="button"
+                            class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold py-3 px-6 rounded transition-colors border border-zinc-700"
+                            hx-tauri-invoke="render_transactions"
+                            hx-target="#expense-list" {
+                            "Cancel"
+                        }
+
+                        button
+                            type="submit"
+                            class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded transition-colors"
+                            hx-tauri-invoke=(if is_edit { "update_expense" } else { "create_expense" })
+                            hx-target="#main-content" {
+                            (submit_label)
+                        }
+                    }
+                }
+            }
+        }
+        }.into_string()
+    }
+}
+
+impl Default for ExpenseForm {
     fn default() -> Self {
         Self::new()
     }

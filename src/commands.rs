@@ -209,6 +209,7 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
 
         // Build transaction component
         let mut transaction = Transaction::new()
+            .expense_id(txn.id.to_string())
             .description(&txn.description)
             .payer_name(&payer_name)
             .total_amount(txn.amount)
@@ -235,4 +236,52 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
     html.push_str("</section>");
 
     Ok(html)
+}
+
+#[tauri::command]
+pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<String, String> {
+    use crate::components::ExpenseForm;
+    
+    let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
+    let group = state.group.lock().map_err(|e| e.to_string())?;
+    let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
+    
+    let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
+    
+    // Parse expense ID
+    let expense_uuid = Uuid::parse_str(&expense_id).map_err(|e| e.to_string())?;
+    
+    // Find the ledger
+    let ledger_with_txns = ledgers
+        .iter()
+        .find(|l| l.ledger.id == ledger_uuid)
+        .ok_or_else(|| "Selected ledger not found".to_string())?;
+    
+    // Find the transaction
+    let txn = ledger_with_txns
+        .transactions
+        .iter()
+        .find(|t| t.id == expense_uuid)
+        .ok_or_else(|| "Transaction not found".to_string())?;
+    
+    // Get available participants from the group
+    let participants: Vec<(String, String)> = group
+        .entities
+        .iter()
+        .map(|e| (e.id.to_string(), e.display_name.clone()))
+        .collect();
+    
+    // Build the expense form
+    let form = ExpenseForm::new()
+        .expense_id(expense_id)
+        .description(&txn.description)
+        .paid_by(&txn.paid_by_entity.to_string())
+        .amount(txn.amount)
+        .currency(&txn.currency_iso_4217)
+        .date(txn.transaction_datetime_rfc_3339.to_string())
+        .split_ratios(txn.split_ratios.clone())
+        .participants(participants)
+        .build();
+    
+    Ok(form)
 }

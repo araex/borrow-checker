@@ -37,6 +37,7 @@ pub struct LedgerWithTransactions {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Transaction {
+    pub id: Uuid,
     pub description: String,
     pub paid_by_entity: Uuid,
     pub currency_iso_4217: String,

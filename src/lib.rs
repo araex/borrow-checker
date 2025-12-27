@@ -62,7 +62,8 @@ pub fn run() {
             commands::render_header,
             commands::render_ledger_header,
             commands::render_transactions,
-            commands::switch_ledger
+            commands::switch_ledger,
+            commands::get_expense
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
