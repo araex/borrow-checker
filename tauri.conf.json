@@ -11,8 +11,8 @@
     "windows": [
       {
         "title": "Borrow Checker",
-        "width": 800,
-        "height": 600,
+        "width": 1400,
+        "height": 900,
         "resizable": true,
         "fullscreen": false
       }
@@ -24,8 +24,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [
-      "icons/icon.png"
-    ]
+    "icon": ["icons/icon.png"]
   }
 }
