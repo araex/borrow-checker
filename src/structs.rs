@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use toml::value::Datetime;
 
 #[derive(Serialize, Deserialize)]
-struct Transaction {
+pub struct Transaction {
     description: String,
     paid_by_entity: String,
     currency_iso_4217: String,
@@ -13,7 +13,7 @@ struct Transaction {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Split {
+pub struct Split {
     entity_id: String,
     ratio: Rational,
 }
