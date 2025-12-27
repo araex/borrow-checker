@@ -1,14 +1,18 @@
+use std::env;
+use std::fs;
+use std::path::Path;
 mod commands;
 mod components;
+mod git_adapter;
 mod structs;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    use structs::*;
-    use uuid::Uuid;
     use rational::Rational;
-    use toml::value::Datetime;
     use std::str::FromStr;
+    use structs::*;
+    use toml::value::Datetime;
+    use uuid::Uuid;
 
     // Initialize test group with entities
     let test_group = Group {
@@ -63,7 +67,11 @@ pub fn run() {
 
     let test_ledger_with_transactions = LedgerWithTransactions {
         ledger: test_ledger.clone(),
-        transactions: vec![test_transaction],
+        transactions: git_adapter::git_adapter::get_transactions(
+            git_adapter::git_adapter::get_repo(),
+            Path::new("ledgers/39C3"),
+        )
+        .unwrap(),
     };
 
     let ledger_id = test_ledger.id;
