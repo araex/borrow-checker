@@ -2,50 +2,88 @@ pub mod git_adapter {
     use core::str;
     use std::path::Path;
 
-    use git2::WorktreeAddOptions;
+    use git2::{ObjectType, Repository, Tree};
 
     use crate::structs;
 
+    /// Given a repository and a tree, return the subtree at `path`.
+    fn subtree_from_tree<'repo>(
+        repo: &'repo Repository,
+        tree: &Tree<'repo>,
+        path: &Path,
+    ) -> Result<Tree<'repo>, git2::Error> {
+        // tree.get_path supports nested paths like "ledgers/39C3"
+        let entry = tree.get_path(path)?; // returns TreeEntry
+
+        // Ensure the TreeEntry is a tree and peel it into a Tree
+        match entry.kind() {
+            Some(ObjectType::Tree) => {
+                let obj = entry.to_object(repo)?;
+                obj.peel_to_tree()
+            }
+            Some(kind) => Err(git2::Error::from_str(&format!(
+                "path is not a tree: {:?}",
+                kind
+            ))),
+            None => Err(git2::Error::from_str("entry has no object type")),
+        }
+    }
+
     pub fn get_transactions() -> Result<Vec<structs::Transaction>, &'static str> {
-        use git2::Repository;
+        let repo_path = "/home/serafin/dev/borrow-checker/data/borrow-checker-testdata";
+        let repo = match Repository::open(repo_path) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("failed to open repo {}: {}", repo_path, e);
+                return Err("failed to open repository");
+            }
+        };
 
-        let repo =
-            match Repository::open("/home/serafin/dev/borrow-checker/data/borrow-checker-testdata")
-            {
-                Ok(repo) => repo,
-                Err(e) => panic!("failed to open: {}", e),
-            };
-
-        let head = repo.head();
-        let wtops = WorktreeAddOptions::new();
-        // let tree = repo
-        //     .worktree("test", Path::new("39C3"), Some(&wtops))
-        //     .unwrap();
-        let repo_ref = repo.find_reference("refs/heads/main");
-
-        println!("Head {}", head.unwrap().name().unwrap());
-        // println!(
-        //     "ref {}",
-        //     repo_ref
-        //         .clone()
-        //         .unwrap()
-        //         .peel_to_tree()
-        //         .unwrap()
-        //         .get_path(Path::new("ledgers/39C3"))
-        //         .unwrap()
-        //         .name()
-        //         .unwrap()
-        // );
-
-        let ledger_tree = repo_ref
-            .unwrap()
-            .peel_to_tree()
-            .unwrap()
-            .get_path(Path::new("ledgers/39C3"))
+        // Try to find refs/heads/main, otherwise fall back to HEAD
+        let reference = repo
+            .find_reference("refs/heads/main")
+            .or_else(|_| repo.head())
+            .map_err(|_| "failed to find main or HEAD")
             .unwrap();
 
-        //  ledger_tree.
+        // Resolve the reference to the commit OID
+        let target_oid = reference
+            .target()
+            .ok_or("reference does not point to an object")
+            .unwrap();
 
-        return Err("Not implemented");
+        // Find the commit and its tree
+        let commit = repo
+            .find_commit(target_oid)
+            .map_err(|_| "failed to find commit")
+            .unwrap();
+        let root_tree = commit.tree().map_err(|_| "failed to get tree").unwrap();
+
+        // The hard-coded ledger path
+        let ledger_path = Path::new("ledgers/39C3");
+
+        // Find subtree for ledger_path
+        let ledger_tree = match subtree_from_tree(&repo, &root_tree, ledger_path) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("failed to get subtree at {:?}: {}", ledger_path, e);
+                return Err("failed to get ledger subtree");
+            }
+        };
+
+        // Example: iterate entries in the subtree and print them.
+        // Replace this with your parsing logic to build Transaction objects.
+        println!("Entries in ledger subtree (ledgers/39C3):");
+        for entry in ledger_tree.iter() {
+            println!(
+                "- name: {:<30} kind: {:?} id: {}",
+                entry.name().unwrap_or(""),
+                entry.kind(),
+                entry.id()
+            );
+        }
+
+        // TODO: parse ledger_tree entries into Vec<structs::Transaction>
+        Err("Not implemented")
     }
 }
