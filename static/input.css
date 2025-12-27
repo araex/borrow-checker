@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+    --font-sans: "Space Grotesk", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+}
+
 @font-face {
     font-family: "Space Grotesk";
     src: url("/fonts/SpaceGrotesk/SpaceGrotesk-Light.woff2") format("woff2");
@@ -38,9 +43,4 @@
     font-weight: 700;
     font-style: normal;
     font-display: swap;
-}
-
-@theme {
-    --font-family-sans: "Space Grotesk", sans-serif;
-    --font-family-mono: "JetBrains Mono", monospace;
 }

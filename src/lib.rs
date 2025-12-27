@@ -14,19 +14,22 @@ fn list_files_html() -> Result<String, String> {
 
     entries.sort_by_key(|e| e.file_name());
 
-    let mut html = format!(r#"<p><strong>Directory:</strong> {}</p><ul>"#, dir_path);
+    let mut html = format!(
+        r#"<div><p class="text-gray-400 text-sm mb-4 font-mono"><strong class="text-gray-200">Directory:</strong> {}</p><ul class="space-y-1">"#,
+        dir_path
+    );
 
     for entry in entries {
         let name = entry.file_name().to_string_lossy().to_string();
         let is_dir = entry.metadata().ok().map(|m| m.is_dir()).unwrap_or(false);
         let icon = if is_dir { "📁" } else { "📄" };
         html.push_str(&format!(
-            r#"<li><span class="file-icon">{}</span> {}</li>"#,
+            r#"<li class="text-gray-300"><span class="mr-2">{}</span>{}</li>"#,
             icon, name
         ));
     }
 
-    html.push_str("</ul>");
+    html.push_str("</ul></div>");
     Ok(html)
 }
 
