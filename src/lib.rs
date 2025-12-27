@@ -36,33 +36,16 @@ pub fn run() {
     use structs::*;
     use uuid::Uuid;
 
-    // Initialize test group with entities
-    let test_group = Group {
-        entities: vec![
-            Entity {
-                id: Uuid::parse_str("c8744a29-7ed0-447a-af5a-51e4ad291d1d").unwrap(),
-                display_name: "Araex".to_string(),
-            },
-            Entity {
-                id: Uuid::parse_str("3abaaf40-a35a-488d-8ef2-0184c8c5f3c3").unwrap(),
-                display_name: "Wüstenschiff".to_string(),
-            },
-            Entity {
-                id: Uuid::parse_str("92c0a0fc-aa86-4922-ab1f-7b9326720177").unwrap(),
-                display_name: "flakmonkey".to_string(),
-            },
-        ],
-    };
-
     let ledgers = load_ledgers();
+    let group = git_adapter::git_adapter::get_group(&git_adapter::git_adapter::get_repo()).unwrap();
 
     // @todo load from config
     let ledger_id = ledgers[0].ledger.id;
-    let user_id = test_group.entities[0].id;
+    let user_id = group.entities[0].id;
 
     tauri::Builder::default()
         .manage(structs::AppState {
-            group: std::sync::Mutex::new(test_group),
+            group: std::sync::Mutex::new(group),
             ledgers: std::sync::Mutex::new(ledgers),
             current_ledger_id: std::sync::Mutex::new(Some(ledger_id)),
             user_id,
