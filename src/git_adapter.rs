@@ -3,6 +3,7 @@ use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{ObjectType, Repository, Tree};
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::str;
 use std::sync::Mutex;
@@ -237,7 +238,7 @@ impl PersistenceRepository for GitPersistence {
                                         "failed to parse .ledger.toml in {}: {}",
                                         ledger_name, e
                                     );
-                                    // continue, but register parse error
+                                    // return a parse error rather than silently continue
                                     return Err(PersistenceError::ParseLedger {
                                         ledger_name,
                                         message: format!("{}", e),
@@ -286,10 +287,99 @@ impl PersistenceRepository for GitPersistence {
         ))
     }
 
-    fn update_ledger(&self, _ledger: structs::Ledger) -> Result<(), PersistenceError> {
-        Err(PersistenceError::UnsupportedOperation(
-            "update_ledger is not implemented for GitPersistence".into(),
-        ))
+    fn update_ledger(&self, ledger: structs::Ledger) -> Result<(), PersistenceError> {
+        // Find ledger path in map
+        let ledger_id = ledger.id;
+        let ledger_path = {
+            let map = self.ledger_map.lock().unwrap();
+            match map.get(&ledger_id) {
+                Some(p) => p.clone(),
+                None => {
+                    return Err(PersistenceError::NotFound(format!(
+                        "ledger id {} not found",
+                        ledger_id
+                    )));
+                }
+            }
+        };
+
+        // Relative path to the marker file in the repo (e.g. "ledgers/39C3/.ledger.toml")
+        let rel_file_path = ledger_path.join(".ledger.toml");
+
+        // Ensure repository has a working directory
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or_else(|| PersistenceError::Other("repository has no working directory".into()))?;
+
+        let full_fs_path = workdir.join(&rel_file_path);
+
+        // Serialize ledger to TOML
+        let toml_text = toml::to_string_pretty(&ledger).map_err(|e| {
+            PersistenceError::Toml(format!("failed to serialize ledger {}: {}", ledger_id, e))
+        })?;
+
+        // Write to filesystem
+        fs::write(&full_fs_path, toml_text.as_bytes()).map_err(|e| {
+            PersistenceError::Io(format!("failed to write {}: {}", full_fs_path.display(), e))
+        })?;
+
+        // Update the git index
+        let mut index = self
+            .repo
+            .index()
+            .map_err(|e| PersistenceError::Git(format!("failed to get index: {}", e)))?;
+
+        index
+            .add_path(&rel_file_path)
+            .map_err(|e| PersistenceError::Git(format!("failed to add path to index: {}", e)))?;
+
+        index
+            .write()
+            .map_err(|e| PersistenceError::Git(format!("failed to write index: {}", e)))?;
+
+        let tree_oid = index
+            .write_tree()
+            .map_err(|e| PersistenceError::Git(format!("failed to write tree: {}", e)))?;
+
+        let tree = self
+            .repo
+            .find_tree(tree_oid)
+            .map_err(|e| PersistenceError::Git(format!("failed to find tree: {}", e)))?;
+
+        // Create signature
+        let sig = self
+            .repo
+            .signature()
+            .map_err(|e| PersistenceError::Git(format!("failed to create signature: {}", e)))?;
+
+        // Determine parent commit (HEAD)
+        let parent_commit = {
+            let head = self
+                .repo
+                .head()
+                .map_err(|e| PersistenceError::Git(format!("failed to get HEAD: {}", e)))?;
+            let target = head
+                .target()
+                .ok_or_else(|| PersistenceError::Other("HEAD has no target commit".into()))?;
+            self.repo.find_commit(target).map_err(|e| {
+                PersistenceError::Git(format!("failed to find parent commit: {}", e))
+            })?
+        };
+
+        // Commit
+        self.repo
+            .commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                &format!("Update ledger {}", ledger_id),
+                &tree,
+                &[&parent_commit],
+            )
+            .map_err(|e| PersistenceError::Git(format!("failed to create commit: {}", e)))?;
+
+        Ok(())
     }
 
     fn delete_ledger(&self, _id: Uuid) -> Result<(), PersistenceError> {
