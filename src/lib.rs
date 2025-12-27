@@ -107,7 +107,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_files_html,
             commands::render_navigation,
-            commands::switch_group,
             commands::switch_ledger
         ])
         .setup(|app| {

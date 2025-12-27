@@ -5,21 +5,14 @@
 use maud::html;
 
 pub struct Navigation {
-    current_group: Option<String>,
     current_ledger: Option<String>,
 }
 
 impl Navigation {
     pub fn new() -> Self {
         Self {
-            current_group: None,
             current_ledger: None,
         }
-    }
-
-    pub fn current_group(mut self, group_name: impl Into<String>) -> Self {
-        self.current_group = Some(group_name.into());
-        self
     }
 
     pub fn current_ledger(mut self, ledger_name: impl Into<String>) -> Self {
@@ -28,9 +21,6 @@ impl Navigation {
     }
 
     pub fn build(self) -> String {
-        let group_display = self
-            .current_group
-            .unwrap_or_else(|| "No Group".to_string());
         let ledger_display = self
             .current_ledger
             .unwrap_or_else(|| "Select Ledger".to_string());
@@ -44,10 +34,6 @@ impl Navigation {
                 }
 
                 div class="breadcrumb flex items-center gap-4 font-mono text-sm" {
-                    span class="text-gray-200" { (group_display) }
-                    
-                    span class="text-gray-600" { "/" }
-
                     select
                         class="bg-zinc-800 text-gray-200 border border-zinc-700 px-4 py-2 cursor-pointer transition-colors hover:text-orange-500 hover:border-orange-500"
                         name="ledger_id"
