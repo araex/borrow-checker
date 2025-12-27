@@ -1,6 +1,7 @@
 pub mod git_adapter {
     use core::str;
-    use std::path::Path;
+    use std::env;
+    use std::path::{Path, PathBuf};
 
     use git2::{ObjectType, Repository, Tree};
 
@@ -29,16 +30,17 @@ pub mod git_adapter {
         }
     }
 
-    pub fn get_transactions() -> Result<Vec<structs::Transaction>, &'static str> {
-        let repo_path = "/home/serafin/dev/borrow-checker/data/borrow-checker-testdata";
-        let repo = match Repository::open(repo_path) {
-            Ok(r) => r,
-            Err(e) => {
-                eprintln!("failed to open repo {}: {}", repo_path, e);
-                return Err("failed to open repository");
-            }
-        };
+    pub fn get_repo() -> Repository {
+        let path = env::current_dir().unwrap();
+        let buf = PathBuf::from(path);
+        let repo_path = buf.join("data/borrow-checker-testdata/");
+        return Repository::open(repo_path).unwrap();
+    }
 
+    pub fn get_transactions(
+        repo: Repository,
+        ledger_path: &Path,
+    ) -> Result<Vec<structs::Transaction>, &'static str> {
         // Try to find refs/heads/main, otherwise fall back to HEAD
         let reference = repo
             .find_reference("refs/heads/main")
@@ -58,9 +60,6 @@ pub mod git_adapter {
             .map_err(|_| "failed to find commit")
             .unwrap();
         let root_tree = commit.tree().map_err(|_| "failed to get tree").unwrap();
-
-        // The hard-coded ledger path
-        let ledger_path = Path::new("ledgers/39C3");
 
         // Find subtree for ledger_path
         let ledger_tree = match subtree_from_tree(&repo, &root_tree, ledger_path) {

@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use std::path::Path;
 mod commands;
 mod components;
 mod git_adapter;
@@ -7,7 +8,11 @@ mod structs;
 
 #[tauri::command]
 fn list_files_html() -> Result<String, String> {
-    git_adapter::git_adapter::get_transactions().ok();
+    git_adapter::git_adapter::get_transactions(
+        git_adapter::git_adapter::get_repo(),
+        Path::new("ledgers/39C3"),
+    )
+    .ok();
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
     let dir_path = current_dir.to_string_lossy();
 
