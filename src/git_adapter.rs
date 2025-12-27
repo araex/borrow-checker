@@ -24,17 +24,18 @@ pub mod git_adapter {
         let repo_ref = repo.find_reference("refs/heads/main");
 
         println!("Head {}", head.unwrap().name().unwrap());
-        println!(
-            "ref {}",
-            repo_ref
-                .unwrap()
-                .peel_to_tree()
-                .unwrap()
-                .get_path(Path::new("ledgers/39C3"))
-                .unwrap()
-                .name()
-                .unwrap()
-        );
+        // println!(
+        //     "ref {}",
+        //     repo_ref
+        //         .clone()
+        //         .unwrap()
+        //         .peel_to_tree()
+        //         .unwrap()
+        //         .get_path(Path::new("ledgers/39C3"))
+        //         .unwrap()
+        //         .name()
+        //         .unwrap()
+        // );
 
         let ledger_tree = repo_ref
             .unwrap()
@@ -42,6 +43,8 @@ pub mod git_adapter {
             .unwrap()
             .get_path(Path::new("ledgers/39C3"))
             .unwrap();
+
+        //  ledger_tree.
 
         return Err("Not implemented");
     }
