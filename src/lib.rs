@@ -1,5 +1,4 @@
 use std::env;
-use std::fs;
 use std::path::Path;
 mod commands;
 mod components;
@@ -8,10 +7,7 @@ mod structs;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    use rational::Rational;
-    use std::str::FromStr;
     use structs::*;
-    use toml::value::Datetime;
     use uuid::Uuid;
 
     // Initialize test group with entities
@@ -43,28 +39,6 @@ pub fn run() {
         ],
     };
 
-    let test_transaction = Transaction {
-        description: "🛫".to_string(),
-        paid_by_entity: Uuid::parse_str("3abaaf40-a35a-488d-8ef2-0184c8c5f3c3").unwrap(),
-        currency_iso_4217: "CHF".to_string(),
-        amount: 598.80,
-        transaction_datetime_rfc_3339: Datetime::from_str("2025-11-17T14:43:02Z").unwrap(),
-        split_ratios: vec![
-            Split {
-                entity_id: Uuid::parse_str("c8744a29-7ed0-447a-af5a-51e4ad291d1d").unwrap(),
-                ratio: Rational::new(1, 3),
-            },
-            Split {
-                entity_id: Uuid::parse_str("3abaaf40-a35a-488d-8ef2-0184c8c5f3c3").unwrap(),
-                ratio: Rational::new(1, 3),
-            },
-            Split {
-                entity_id: Uuid::parse_str("92c0a0fc-aa86-4922-ab1f-7b9326720177").unwrap(),
-                ratio: Rational::new(1, 3),
-            },
-        ],
-    };
-
     let test_ledger_with_transactions = LedgerWithTransactions {
         ledger: test_ledger.clone(),
         transactions: git_adapter::git_adapter::get_transactions(
@@ -85,7 +59,8 @@ pub fn run() {
             user_id,
         })
         .invoke_handler(tauri::generate_handler![
-            commands::render_navigation,
+            commands::render_header,
+            commands::render_ledger_header,
             commands::render_transactions,
             commands::switch_ledger
         ])

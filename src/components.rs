@@ -4,14 +4,18 @@
 /// and return HTML strings styled with Tailwind CSS classes.
 use maud::html;
 
-pub struct Navigation {
+pub struct Header {
     current_ledger: Option<String>,
+    current_user_name: Option<String>,
+    group_members: Vec<String>,
 }
 
-impl Navigation {
+impl Header {
     pub fn new() -> Self {
         Self {
             current_ledger: None,
+            current_user_name: None,
+            group_members: Vec::new(),
         }
     }
 
@@ -20,11 +24,17 @@ impl Navigation {
         self
     }
 
-    pub fn build(self) -> String {
-        let ledger_display = self
-            .current_ledger
-            .unwrap_or_else(|| "Select Ledger".to_string());
+    pub fn current_user(mut self, user_name: impl Into<String>) -> Self {
+        self.current_user_name = Some(user_name.into());
+        self
+    }
 
+    pub fn group_members(mut self, members: Vec<String>) -> Self {
+        self.group_members = members;
+        self
+    }
+
+    pub fn build(self) -> String {
         html! {
             nav class="bg-zinc-900 px-12 py-6 flex justify-between items-center border-b border-zinc-700" {
                 div class="brand" {
@@ -32,14 +42,26 @@ impl Navigation {
                         "Borrow Checker"
                     }
                 }
-
-                div class="breadcrumb flex items-center gap-4 font-mono text-sm" {
-                    select
-                        class="bg-zinc-800 text-gray-200 border border-zinc-700 px-4 py-2 cursor-pointer transition-colors hover:text-orange-500 hover:border-orange-500"
-                        name="ledger_id"
-                        hx-tauri-invoke="switch_ledger"
-                        hx-target="#main-content" {
-                        option selected { (ledger_display) }
+                @if let Some(user_name) = self.current_user_name {
+                    div class="flex items-center gap-6" {
+                        @if !self.group_members.is_empty() {
+                            div class="flex items-center gap-3" {
+                                span class="text-zinc-500 text-sm" { "Group:" }
+                                div class="flex gap-2" {
+                                    @for member in &self.group_members {
+                                        span class="text-zinc-300 text-sm px-3 py-1 bg-zinc-800 rounded-full border border-zinc-700" {
+                                            (member)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        div class="flex items-center gap-2" {
+                            span class="text-zinc-500 text-sm" { "Logged in as:" }
+                            span class="text-orange-400 font-semibold text-sm" {
+                                (user_name)
+                            }
+                        }
                     }
                 }
             }
@@ -47,7 +69,7 @@ impl Navigation {
     }
 }
 
-impl Default for Navigation {
+impl Default for Header {
     fn default() -> Self {
         Self::new()
     }
@@ -133,14 +155,14 @@ impl Transaction {
         };
 
         html! {
-            div 
+            div
                 class="expense-item group relative grid grid-cols-[1fr_auto_auto] items-center px-12 py-6 border-b border-zinc-700 cursor-pointer transition-colors hover:bg-zinc-900"
                 hx-tauri-invoke=(format!("get_expense:{}", expense_id))
                 hx-target="#main-content" {
-                
+
                 // Hover background effect
                 div class="absolute inset-0 bg-gradient-to-r from-transparent to-white/[0.03] scale-x-0 origin-left transition-transform duration-600 ease-out group-hover:scale-x-100 pointer-events-none" {}
-                
+
                 // Main info
                 div class="relative z-10" {
                     h3 class="text-xl font-light mb-1" {
@@ -150,7 +172,7 @@ impl Transaction {
                         "Paid by: " (self.payer_name) " • Total: " (self.currency) " " (format!("{:.2}", self.total_amount)) " • " (self.date)
                     }
                 }
-                
+
                 // Status
                 div class="relative z-10 text-right mr-8 font-mono" {
                     span class="block text-[0.65rem] text-gray-500 uppercase" {
@@ -160,7 +182,7 @@ impl Transaction {
                         (amount_display)
                     }
                 }
-                
+
                 // Chevron
                 div class="relative z-10" {
                     svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" {
@@ -173,6 +195,96 @@ impl Transaction {
 }
 
 impl Default for Transaction {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct LedgerHeader {
+    ledger_name: String,
+    balance_amount: f64,
+    currency: String,
+    ledgers: Vec<(String, String)>, // (id, name) pairs
+}
+
+impl LedgerHeader {
+    pub fn new() -> Self {
+        Self {
+            ledger_name: String::new(),
+            balance_amount: 0.0,
+            currency: String::from("USD"),
+            ledgers: Vec::new(),
+        }
+    }
+
+    pub fn ledger_name(mut self, name: impl Into<String>) -> Self {
+        self.ledger_name = name.into();
+        self
+    }
+
+    pub fn balance_amount(mut self, amount: f64) -> Self {
+        self.balance_amount = amount;
+        self
+    }
+
+    pub fn currency(mut self, currency: impl Into<String>) -> Self {
+        self.currency = currency.into();
+        self
+    }
+
+    pub fn ledgers(mut self, ledgers: Vec<(String, String)>) -> Self {
+        self.ledgers = ledgers;
+        self
+    }
+
+    pub fn build(self) -> String {
+        let balance_display = if self.balance_amount < 0.0 {
+            format!("-{} {:.2}", self.currency, self.balance_amount.abs())
+        } else {
+            format!("{} {:.2}", self.currency, self.balance_amount)
+        };
+
+        html! {
+            header class="px-12 py-8 flex justify-between items-end border-b border-zinc-700 bg-gradient-to-b from-zinc-900 to-transparent" id="ledger-header" {
+                div class="title-group" {
+                    span class="font-mono text-xs text-orange-500 uppercase tracking-wide" {
+                        "LEDGER"
+                    }
+                    div class="flex items-center gap-2" {
+                        select
+                            class="text-5xl font-light uppercase tracking-tight leading-tight bg-transparent text-white border-none outline-none cursor-pointer flex-shrink-0"
+                            style="-webkit-appearance: none; -moz-appearance: none; appearance: none; width: fit-content;"
+                            name="ledger_id"
+                            hx-tauri-invoke="switch_ledger"
+                            hx-target="#main-content" {
+                            @for (id, name) in &self.ledgers {
+                                option value=(id) selected[name == &self.ledger_name] {
+                                    (name)
+                                }
+                            }
+                        }
+                        span class="pointer-events-none opacity-40 flex-shrink-0" {
+                            svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" {
+                                path d="M7 10l5 5 5-5" {}
+                            }
+                        }
+                    }
+                }
+
+                div class="balance text-right" {
+                    span class="font-mono text-xs text-gray-500 uppercase block mb-2" {
+                        "YOUR BALANCE"
+                    }
+                    span class="font-mono text-3xl text-white" {
+                        (balance_display)
+                    }
+                }
+            }
+        }.into_string()
+    }
+}
+
+impl Default for LedgerHeader {
     fn default() -> Self {
         Self::new()
     }

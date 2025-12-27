@@ -21,19 +21,31 @@
             class="flex flex-col w-[calc(100vw-48px)] max-w-[1400px] h-[calc(100vh-48px)] bg-black border border-zinc-700 shadow-[20px_20px_60px_#050505,-5px_-5px_20px_rgba(255,255,255,0.02)] relative overflow-hidden"
         >
             <div
-                id="navigation"
-                hx-tauri-invoke="render_navigation"
+                id="header"
+                hx-tauri-invoke="render_header"
                 hx-trigger="load"
             ></div>
 
             <main
                 id="main-content"
-                class="relative overflow-y-auto flex flex-col z-10 p-2"
-                hx-tauri-invoke="render_transactions"
-                hx-trigger="load"
+                class="relative overflow-y-auto flex flex-col z-10"
             >
-                <div class="flex items-center justify-center h-full">
-                    <p class="font-mono text-gray-600 text-sm">Loading...</p>
+                <div
+                    id="ledger-header"
+                    hx-tauri-invoke="render_ledger_header"
+                    hx-trigger="load"
+                ></div>
+
+                <div
+                    id="expense-list"
+                    hx-tauri-invoke="render_transactions"
+                    hx-trigger="load"
+                >
+                    <div class="flex items-center justify-center h-full p-12">
+                        <p class="font-mono text-gray-600 text-sm">
+                            Loading...
+                        </p>
+                    </div>
                 </div>
             </main>
         </div>
