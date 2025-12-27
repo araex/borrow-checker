@@ -202,7 +202,7 @@ impl Default for Transaction {
 
 pub struct LedgerHeader {
     ledger_name: String,
-    balance_amount: f64,
+    balances: Vec<(String, f64)>, // (user_name, amount) pairs
     currency: String,
     ledgers: Vec<(String, String)>, // (id, name) pairs
 }
@@ -211,7 +211,7 @@ impl LedgerHeader {
     pub fn new() -> Self {
         Self {
             ledger_name: String::new(),
-            balance_amount: 0.0,
+            balances: Vec::new(),
             currency: String::from("USD"),
             ledgers: Vec::new(),
         }
@@ -222,8 +222,8 @@ impl LedgerHeader {
         self
     }
 
-    pub fn balance_amount(mut self, amount: f64) -> Self {
-        self.balance_amount = amount;
+    pub fn balances(mut self, balances: Vec<(String, f64)>) -> Self {
+        self.balances = balances;
         self
     }
 
@@ -238,12 +238,6 @@ impl LedgerHeader {
     }
 
     pub fn build(self) -> String {
-        let balance_display = if self.balance_amount < 0.0 {
-            format!("-{} {:.2}", self.currency, self.balance_amount.abs())
-        } else {
-            format!("{} {:.2}", self.currency, self.balance_amount)
-        };
-
         html! {
             header class="px-12 py-8 flex justify-between items-end border-b border-zinc-700 bg-gradient-to-b from-zinc-900 to-transparent" id="ledger-header" {
                 div class="title-group" {
@@ -272,11 +266,36 @@ impl LedgerHeader {
                 }
 
                 div class="balance text-right" {
-                    span class="font-mono text-xs text-gray-500 uppercase block mb-2" {
-                        "YOUR BALANCE"
+                    span class="font-mono text-xs text-gray-500 uppercase block mb-3" {
+                        "YOUR BALANCES"
                     }
-                    span class="font-mono text-3xl text-white" {
-                        (balance_display)
+                    @if self.balances.is_empty() {
+                        span class="font-mono text-xl text-gray-600" {
+                            "All settled up"
+                        }
+                    } @else {
+                        div class="space-y-2" {
+                            @for (user_name, amount) in &self.balances {
+                                div class="flex items-center justify-end gap-3" {
+                                    span class="text-sm text-gray-400" {
+                                        (user_name)
+                                    }
+                                    @if *amount < 0.0 {
+                                        span class="font-mono text-lg text-red-500" {
+                                            (format!("-{} {:.2}", self.currency, amount.abs()))
+                                        }
+                                    } @else if *amount > 0.0 {
+                                        span class="font-mono text-lg text-green-400" {
+                                            (format!("{} {:.2}", self.currency, amount))
+                                        }
+                                    } @else {
+                                        span class="font-mono text-lg text-gray-600" {
+                                            (format!("{} 0.00", self.currency))
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -54,8 +54,8 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
         .find(|l| l.ledger.id == ledger_uuid)
         .ok_or_else(|| "Selected ledger not found".to_string())?;
 
-    // Calculate user's balance from all transactions
-    let mut balance = 0.0;
+    // Calculate per-user balances from all transactions
+    let mut balances: std::collections::HashMap<Uuid, f64> = std::collections::HashMap::new();
     let mut currency = String::from("USD");
 
     for txn in &ledger_with_txns.transactions {
@@ -74,14 +74,39 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
 
         let user_share = txn.amount * user_ratio;
 
-        // If user paid, they are owed (amount - user_share)
-        // If someone else paid, user owes their share
+        // If user paid, they are owed money by others
         if txn.paid_by_entity == user_uuid {
-            balance += txn.amount - user_share;
-        } else {
-            balance -= user_share;
+            // User is owed by each person in the split
+            for split in &txn.split_ratios {
+                if split.entity_id != user_uuid {
+                    let other_share = txn.amount * (split.ratio.numerator() as f64 / split.ratio.denominator() as f64);
+                    *balances.entry(split.entity_id).or_insert(0.0) += other_share;
+                }
+            }
+        } else if txn.paid_by_entity != user_uuid {
+            // User owes money to the person who paid
+            *balances.entry(txn.paid_by_entity).or_insert(0.0) -= user_share;
         }
     }
+
+    // Get the group entities to map UUIDs to names
+    let group = state.group.lock().map_err(|e| e.to_string())?;
+    
+    // Convert HashMap to Vec of (name, amount) pairs, filtering out the current user
+    let mut balance_list: Vec<(String, f64)> = balances
+        .into_iter()
+        .filter(|(_, amount)| amount.abs() > 0.01) // Filter out near-zero balances
+        .filter_map(|(entity_id, amount)| {
+            group
+                .entities
+                .iter()
+                .find(|e| e.id == entity_id)
+                .map(|e| (e.display_name.clone(), amount))
+        })
+        .collect();
+    
+    // Sort by absolute amount descending
+    balance_list.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap_or(std::cmp::Ordering::Equal));
 
     // Collect all available ledgers for the dropdown
     let available_ledgers: Vec<(String, String)> = ledgers
@@ -91,7 +116,7 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
 
     let header = LedgerHeader::new()
         .ledger_name(&ledger_with_txns.ledger.display_name)
-        .balance_amount(balance)
+        .balances(balance_list)
         .currency(&currency)
         .ledgers(available_ledgers)
         .build();
