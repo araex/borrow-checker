@@ -51,25 +51,46 @@ pub struct Split {
 
 #[cfg(test)]
 mod tests {
+    
     use std::{
         fs::read_to_string,
         path::{Path, PathBuf},
     };
+    
+    use test_context::{test_context, TestContext};
 
     use super::*;
+    struct TestTransactions {
+        flight: Transaction,
+        ticket: Transaction,   
+    }
 
+    impl TestContext for TestTransactions {
+        fn setup() -> Self {
+            let ticket:Transaction = toml::from_str(&read_toml("data/borrow-checker-testdata/ledgers/39C3/019b5b3b-25e7-7e53-a0b6-0af3afde297c.toml").unwrap()).unwrap();
+            let flight:Transaction = toml::from_str(&read_toml("data/borrow-checker-testdata/ledgers/39C3/019b5b4f-8077-7c4b-89d4-9380c444ee9d.toml").unwrap()).unwrap();
+
+            TestTransactions { flight, ticket }
+        }
+    }
+
+    fn read_toml(toml_relative_path: &str) -> Result<String, std::io::Error> {
+        let mut test_data_full_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        test_data_full_path.push(toml_relative_path);
+       
+        read_to_string(test_data_full_path)
+    }
+
+    #[test_context(TestTransactions)]
     #[test]
-    fn test_parse_transaction_description() {
-        let mut test_data1 = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        test_data1.push("data/borrow-checker-testdata/ledgers/39C3/019b5b4f-8077-7c4b-89d4-9380c444ee9d.toml");
-        
+    fn test_transaction_description_flight(sut: &mut TestTransactions) {
+        assert_eq!(sut.flight.description, "🛫");
+    }
 
-
-        let foo = read_to_string(test_data1).unwrap();
-
-        let sut: Transaction = toml::from_str(&foo).unwrap();
-
-        assert_eq!(sut.description, "🛫");
+    #[test_context(TestTransactions)]
+    #[test]
+    fn test_transaction_description_ticket(sut: &mut TestTransactions) {
+        assert_eq!(sut.ticket.description, "🎫🍖🏰");
     }
 
     #[test]
