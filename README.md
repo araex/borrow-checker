@@ -16,3 +16,18 @@ cargo tauri dev
 ```bash
 cargo tauri build
 ```
+#### Android Build
+Requirements
+- Android Studio installed
+- Android Studio configured (NDK and tools installed) 
+
+Create Android Studio project via Tauri
+```bash
+cargo tauri android init
+```
+
+Build Android debug build
+```bash
+cargo tauri android dev
+```
+Run or debug project via Android Studio on the target of choice.
