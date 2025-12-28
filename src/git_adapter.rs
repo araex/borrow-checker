@@ -542,12 +542,100 @@ impl PersistenceRepository for GitPersistence {
 
     fn create_transaction(
         &self,
-        _ledger_id: Uuid,
-        _transaction: structs::Transaction,
+        ledger_id: Uuid,
+        transaction: structs::Transaction,
     ) -> Result<Uuid, PersistenceError> {
-        Err(PersistenceError::UnsupportedOperation(
-            "create_transaction is not implemented for GitPersistence".into(),
-        ))
+        // Find ledger relative path in map (path is relative to repo root)
+        let ledger_rel_path = {
+            let map = self.ledger_map.lock().unwrap();
+            match map.get(&ledger_id) {
+                Some(p) => p.clone(),
+                None => {
+                    return Err(PersistenceError::NotFound(format!(
+                        "ledger id {} not found",
+                        ledger_id
+                    )));
+                }
+            }
+        };
+
+        let transaction_id = transaction.id;
+        let rel_file_path = ledger_rel_path.join(format!("{}.toml", transaction_id));
+
+        // Ensure repository has a working directory
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
+
+        let full_fs_path = workdir.join(&rel_file_path);
+
+        // Serialize transaction to TOML
+        let toml_text = toml::to_string_pretty(&transaction).map_err(|e| {
+            PersistenceError::DataError(format!("failed to serialize transaction {}: {}", transaction_id, e))
+        })?;
+
+        // Write to filesystem
+        fs::write(&full_fs_path, toml_text.as_bytes()).map_err(|e| {
+            PersistenceError::DataError(format!("failed to write {}: {}", full_fs_path.display(), e))
+        })?;
+
+        // Update the git index
+        let mut index = self
+            .repo
+            .index()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
+
+        index
+            .add_path(&rel_file_path)
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to add path to index: {}", e)))?;
+
+        index
+            .write()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
+
+        let tree_oid = index
+            .write_tree()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
+
+        let tree = self
+            .repo
+            .find_tree(tree_oid)
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
+
+        // Create signature
+        let sig = self
+            .repo
+            .signature()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
+
+        // Determine parent commit (HEAD)
+        let parent_commit = {
+            let head = self
+                .repo
+                .head()
+                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
+            let target = head
+                .target()
+                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
+            self.repo.find_commit(target).map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
+            })?
+        };
+
+        // Commit
+        self.repo
+            .commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                &format!("Add transaction {} to ledger {}", transaction_id, ledger_id),
+                &tree,
+                &[&parent_commit],
+            )
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
+
+        Ok(transaction_id)
     }
 
     fn update_transaction(
