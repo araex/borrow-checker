@@ -1,0 +1,113 @@
+<div class="flex flex-col h-full p-8 gap-6">
+    <div class="flex items-center justify-between">
+        <h2 class="text-2xl font-bold text-orange-500">Settings</h2>
+        <button
+            class="text-zinc-400 hover:text-orange-500 transition-colors"
+            hx-tauri-invoke="render_main_content"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="flex flex-col gap-8">
+        <!-- User Settings Section -->
+        <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-700">
+            <h3 class="text-lg font-semibold text-zinc-300 mb-4">User Information</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-zinc-400 mb-2">Display Name</label>
+                    <input
+                        type="text"
+                        value="{{ user_name }}"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 focus:outline-none focus:border-orange-500"
+                        readonly
+                    />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-zinc-400 mb-2">User ID</label>
+                    <input
+                        type="text"
+                        value="{{ user_id }}"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 font-mono text-sm focus:outline-none"
+                        readonly
+                    />
+                </div>
+            </div>
+        </div>
+
+        <!-- Group Settings Section -->
+        <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-700">
+            <h3 class="text-lg font-semibold text-zinc-300 mb-4">Group Members</h3>
+            <div class="space-y-3">
+                {% for member in group_members %}
+                <div class="flex items-center justify-between bg-zinc-800 rounded px-4 py-3 border border-zinc-700">
+                    <span class="text-zinc-200">{{ member }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Ledger Settings Section -->
+        <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-700">
+            <h3 class="text-lg font-semibold text-zinc-300 mb-4">Ledgers</h3>
+            <div class="space-y-3">
+                {% for ledger in ledgers %}
+                <div class="flex items-center justify-between bg-zinc-800 rounded px-4 py-3 border border-zinc-700">
+                    <span class="text-zinc-200">{{ ledger }}</span>
+                    {% if *ledger == current_ledger %}
+                    <span class="text-xs text-orange-500 font-semibold px-2 py-1 bg-orange-500/10 rounded">CURRENT</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- SSH Keys Section -->
+        <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-700">
+            <h3 class="text-lg font-semibold text-zinc-300 mb-4">SSH Keys</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-zinc-400 mb-2">Private Key Location</label>
+                    <div class="flex gap-2">
+                        <input
+                            id="ssh-private-key-path"
+                            type="text"
+                            value="{{ ssh_private_key_path }}"
+                            class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 font-mono text-sm focus:outline-none"
+                            readonly
+                        />
+                        <button
+                            onclick="navigator.clipboard.writeText(document.getElementById('ssh-private-key-path').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 2000)"
+                            class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded font-semibold text-sm transition-colors"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-zinc-400 mb-2">Public Key</label>
+                    <div class="flex gap-2">
+                        <input
+                            id="ssh-public-key"
+                            type="text"
+                            value="{{ ssh_public_key }}"
+                            class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 font-mono text-xs focus:outline-none"
+                            readonly
+                        />
+                        <button
+                            onclick="navigator.clipboard.writeText(document.getElementById('ssh-public-key').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 2000)"
+                            class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded font-semibold text-sm transition-colors"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

@@ -1,4 +1,4 @@
-use crate::components::{Header, LedgerHeader, Transaction};
+use crate::components::{Header, LedgerHeader, MainContent, Settings, Transaction};
 use crate::structs::AppState;
 use uuid::Uuid;
 
@@ -252,4 +252,75 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
         .build();
 
     Ok(form)
+}
+
+#[tauri::command]
+pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> {
+    let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
+    let group = state.group.lock().map_err(|e| e.to_string())?;
+    let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
+    let user_uuid = state.user_id;
+
+    // Get current user's display name
+    let user_name = group
+        .entities
+        .iter()
+        .find(|e| e.id == user_uuid)
+        .map(|e| e.display_name.clone())
+        .unwrap_or_else(|| "Unknown User".to_string());
+
+    // Get all group members
+    let group_members: Vec<String> = group
+        .entities
+        .iter()
+        .map(|e| e.display_name.clone())
+        .collect();
+
+    // Get all ledger names
+    let ledger_names: Vec<String> = ledgers
+        .iter()
+        .map(|l| l.display_name.clone())
+        .collect();
+
+    // Get current ledger name
+    let current_ledger = current_ledger_id
+        .and_then(|id| ledgers.iter().find(|l| l.id == id))
+        .map(|l| l.display_name.clone())
+        .unwrap_or_else(|| "Unknown Ledger".to_string());
+
+    // Get SSH key information
+    let ssh_private_key_path = crate::ssh_keys::get_private_key_path()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "Unable to get key path".to_string());
+
+    let ssh_public_key = crate::ssh_keys::get_public_key_content()
+        .unwrap_or_else(|_| "Unable to read public key".to_string())
+        .trim()
+        .to_string();
+
+    let settings = Settings::new()
+        .user_name(user_name)
+        .user_id(user_uuid.to_string())
+        .group_members(group_members)
+        .ledgers(ledger_names)
+        .current_ledger(current_ledger)
+        .ssh_private_key_path(ssh_private_key_path)
+        .ssh_public_key(ssh_public_key)
+        .build();
+
+    Ok(settings)
+}
+
+#[tauri::command]
+pub fn render_main_content(state: tauri::State<AppState>) -> Result<String, String> {
+    // Render both ledger header and transactions
+    let ledger_header = render_ledger_header(state.clone())?;
+    let transactions = render_transactions(state)?;
+    
+    let content = MainContent::new()
+        .ledger_header(ledger_header)
+        .transactions(transactions)
+        .build();
+    
+    Ok(content)
 }

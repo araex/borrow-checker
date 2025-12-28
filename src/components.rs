@@ -264,3 +264,112 @@ impl Default for ExpenseForm {
         Self::new()
     }
 }
+
+#[derive(Template)]
+#[template(path = "settings.html")]
+pub struct Settings {
+    user_name: String,
+    user_id: String,
+    group_members: Vec<String>,
+    ledgers: Vec<String>,
+    current_ledger: String,
+    ssh_private_key_path: String,
+    ssh_public_key: String,
+}
+
+impl Settings {
+    pub fn new() -> Self {
+        Self {
+            user_name: String::new(),
+            user_id: String::new(),
+            group_members: Vec::new(),
+            ledgers: Vec::new(),
+            current_ledger: String::new(),
+            ssh_private_key_path: String::new(),
+            ssh_public_key: String::new(),
+        }
+    }
+
+    pub fn user_name(mut self, name: impl Into<String>) -> Self {
+        self.user_name = name.into();
+        self
+    }
+
+    pub fn user_id(mut self, id: impl Into<String>) -> Self {
+        self.user_id = id.into();
+        self
+    }
+
+    pub fn group_members(mut self, members: Vec<String>) -> Self {
+        self.group_members = members;
+        self
+    }
+
+    pub fn ledgers(mut self, ledgers: Vec<String>) -> Self {
+        self.ledgers = ledgers;
+        self
+    }
+
+    pub fn current_ledger(mut self, ledger: impl Into<String>) -> Self {
+        self.current_ledger = ledger.into();
+        self
+    }
+
+    pub fn ssh_private_key_path(mut self, path: impl Into<String>) -> Self {
+        self.ssh_private_key_path = path.into();
+        self
+    }
+
+    pub fn ssh_public_key(mut self, key: impl Into<String>) -> Self {
+        self.ssh_public_key = key.into();
+        self
+    }
+
+    pub fn build(self) -> String {
+        self.render()
+            .unwrap_or_else(|e| format!("Template error: {}", e))
+    }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Template)]
+#[template(path = "main_content.html")]
+pub struct MainContent {
+    ledger_header: String,
+    transactions: String,
+}
+
+impl MainContent {
+    pub fn new() -> Self {
+        Self {
+            ledger_header: String::new(),
+            transactions: String::new(),
+        }
+    }
+
+    pub fn ledger_header(mut self, header: impl Into<String>) -> Self {
+        self.ledger_header = header.into();
+        self
+    }
+
+    pub fn transactions(mut self, transactions: impl Into<String>) -> Self {
+        self.transactions = transactions.into();
+        self
+    }
+
+    pub fn build(self) -> String {
+        self.render()
+            .unwrap_or_else(|e| format!("Template error: {}", e))
+    }
+}
+
+impl Default for MainContent {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -21,7 +21,7 @@ fn get_ssh_key_dir() -> io::Result<PathBuf> {
 }
 
 /// Get the path to the private key file
-fn get_private_key_path() -> io::Result<PathBuf> {
+pub fn get_private_key_path() -> io::Result<PathBuf> {
     let ssh_dir = get_ssh_key_dir()?;
     Ok(ssh_dir.join("id_ed25519"))
 }
@@ -30,6 +30,12 @@ fn get_private_key_path() -> io::Result<PathBuf> {
 fn get_public_key_path() -> io::Result<PathBuf> {
     let ssh_dir = get_ssh_key_dir()?;
     Ok(ssh_dir.join("id_ed25519.pub"))
+}
+
+/// Read the public key content
+pub fn get_public_key_content() -> io::Result<String> {
+    let public_path = get_public_key_path()?;
+    fs::read_to_string(public_path)
 }
 
 /// Check if SSH keys already exist
