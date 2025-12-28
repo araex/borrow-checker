@@ -30,13 +30,13 @@ impl GitPersistence {
         let path = match repo_path {
             Some(p) => p,
             None => {
-                let cwd = env::current_dir().map_err(|e| PersistenceError::Io(format!("{}", e)))?;
+                let cwd = env::current_dir().map_err(|e| PersistenceError::DataError(format!("{}", e)))?;
                 cwd.join("data/borrow-checker-testdata/")
             }
         };
 
         let repo = Repository::open(&path)
-            .map_err(|e| PersistenceError::RepoOpen(format!("{}: {}", path.display(), e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("{}: {}", path.display(), e)))?;
 
         Ok(GitPersistence {
             repo,
@@ -51,20 +51,20 @@ impl GitPersistence {
             .repo
             .find_reference("refs/heads/main")
             .or_else(|_| self.repo.head())
-            .map_err(|e| PersistenceError::Git(format!("failed to find main or HEAD: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find main or HEAD: {}", e)))?;
 
         let target_oid = reference.target().ok_or_else(|| {
-            PersistenceError::Other("reference does not point to an object".into())
+            PersistenceError::RepositoryError("reference does not point to an object".into())
         })?;
 
         let commit = self
             .repo
             .find_commit(target_oid)
-            .map_err(|e| PersistenceError::Git(format!("failed to find commit: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find commit: {}", e)))?;
 
         let root_tree = commit
             .tree()
-            .map_err(|e| PersistenceError::Git(format!("failed to get tree: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get tree: {}", e)))?;
         Ok(root_tree)
     }
 
@@ -76,22 +76,22 @@ impl GitPersistence {
     ) -> Result<Tree<'repo>, PersistenceError> {
         let entry = tree
             .get_path(path)
-            .map_err(|e| PersistenceError::Git(format!("failed to find path {:?}: {}", path, e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find path {:?}: {}", path, e)))?;
 
         match entry.kind() {
             Some(ObjectType::Tree) => {
                 let obj = entry
                     .to_object(&self.repo)
-                    .map_err(|e| PersistenceError::Git(format!("to_object failed: {}", e)))?;
+                    .map_err(|e| PersistenceError::RepositoryError(format!("to_object failed: {}", e)))?;
                 Ok(obj
                     .peel_to_tree()
-                    .map_err(|e| PersistenceError::Git(format!("peel_to_tree failed: {}", e)))?)
+                    .map_err(|e| PersistenceError::RepositoryError(format!("peel_to_tree failed: {}", e)))?)
             }
-            Some(kind) => Err(PersistenceError::InvalidObjectType(format!(
+            Some(kind) => Err(PersistenceError::RepositoryError(format!(
                 "path {:?} is not a tree (kind={:?})",
                 path, kind
             ))),
-            None => Err(PersistenceError::InvalidObjectType(format!(
+            None => Err(PersistenceError::RepositoryError(format!(
                 "entry at {:?} has no object type",
                 path
             ))),
@@ -110,17 +110,17 @@ impl GitPersistence {
                 let blob = self
                     .repo
                     .find_blob(entry.id())
-                    .map_err(|e| PersistenceError::Git(format!("failed to read blob: {}", e)))?;
+                    .map_err(|e| PersistenceError::RepositoryError(format!("failed to read blob: {}", e)))?;
                 let text = str::from_utf8(blob.content())
-                    .map_err(|e| PersistenceError::Utf8(format!("{}", e)))?;
+                    .map_err(|e| PersistenceError::DataError(format!("UTF-8 decode error: {}", e)))?;
                 Ok(text.to_string())
             }
-            Some(kind) => Err(PersistenceError::InvalidObjectType(format!(
+            Some(kind) => Err(PersistenceError::RepositoryError(format!(
                 "expected blob at {}, got {:?}",
                 path_in_repo.display(),
                 kind
             ))),
-            None => Err(PersistenceError::InvalidObjectType(format!(
+            None => Err(PersistenceError::RepositoryError(format!(
                 "entry at {} has no object type",
                 path_in_repo.display()
             ))),
@@ -143,7 +143,7 @@ impl PersistenceRepository for GitPersistence {
     fn load_group(&self) -> Result<structs::Group, PersistenceError> {
         let text = self.read_blob_text(Path::new("group.toml"))?;
         let group: structs::Group =
-            toml::from_str(&text).map_err(|e| PersistenceError::Toml(format!("{}", e)))?;
+            toml::from_str(&text).map_err(|e| PersistenceError::DataError(format!("TOML parse error: {}", e)))?;
         Ok(group)
     }
 
@@ -164,7 +164,7 @@ impl PersistenceRepository for GitPersistence {
         let ledgers_tree = match self.subtree_from_tree(&root_tree, &self.ledgers_root) {
             Ok(t) => t,
             Err(e) => {
-                return Err(PersistenceError::Git(format!(
+                return Err(PersistenceError::RepositoryError(format!(
                     "failed to get ledgers subtree: {}",
                     e
                 )));
@@ -221,56 +221,54 @@ impl PersistenceRepository for GitPersistence {
                         None => continue, // not a ledger folder
                     };
 
-                    match ledger_blob_entry.kind() {
-                        Some(ObjectType::Blob) => {
-                            let blob = match self.repo.find_blob(ledger_blob_entry.id()) {
-                                Ok(b) => b,
-                                Err(e) => {
-                                    eprintln!(
-                                        "failed to read .ledger.toml blob in {}: {}",
-                                        ledger_dir_name, e
-                                    );
-                                    continue;
-                                }
-                            };
-                            let text = match str::from_utf8(blob.content()) {
-                                Ok(t) => t,
-                                Err(e) => {
-                                    eprintln!(
-                                        ".ledger.toml in {} is not valid utf8: {}",
-                                        ledger_dir_name, e
-                                    );
-                                    continue;
-                                }
-                            };
-                            match toml::from_str::<structs::Ledger>(text) {
-                                Ok(ledger) => {
-                                    // record successful ledger; store relative path using the tree entry name (ledger folder name)
-                                    let rel_path = self.ledgers_root.join(ledger_dir_name.clone());
-                                    successful_map_entries.push((ledger.id, rel_path));
-                                    results.push(ledger);
-                                }
-                                Err(e) => {
-                                    // Log parse error but continue scanning other ledgers.
-                                    eprintln!(
-                                        "failed to parse .ledger.toml in {}: {}",
-                                        ledger_dir_name, e
-                                    );
-                                    continue;
-                                }
+                    // Ensure .ledger.toml is a blob
+                    let blob = match ledger_blob_entry.kind() {
+                        Some(ObjectType::Blob) => match self.repo.find_blob(ledger_blob_entry.id()) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                return Err(PersistenceError::RepositoryError(format!(
+                                    "unable to read .ledger.toml in {}: {}",
+                                    ledger_dir_name, e
+                                )));
                             }
-                        }
+                        },
                         Some(k) => {
-                            eprintln!(
-                                "found .ledger.toml in {} but it's not a blob (kind={:?})",
+                            return Err(PersistenceError::RepositoryError(format!(
+                                ".ledger.toml in {} is not a blob (kind={:?})",
                                 ledger_dir_name, k
-                            );
+                            )));
                         }
                         None => {
-                            eprintln!(
-                                ".ledger.toml entry in {} has no object type",
+                            return Err(PersistenceError::RepositoryError(format!(
+                                ".ledger.toml in {} has no object type",
                                 ledger_dir_name
-                            );
+                            )));
+                        }
+                    };
+
+                    // Parse blob content
+                    let text = match str::from_utf8(blob.content()) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            return Err(PersistenceError::DataError(format!(
+                                ".ledger.toml in {} is not valid utf8: {}",
+                                ledger_dir_name, e
+                            )));
+                        }
+                    };
+
+                    match toml::from_str::<structs::Ledger>(text) {
+                        Ok(ledger) => {
+                            // record successful ledger; store relative path using the tree entry name (ledger folder name)
+                            let rel_path = self.ledgers_root.join(ledger_dir_name.clone());
+                            successful_map_entries.push((ledger.id, rel_path));
+                            results.push(ledger);
+                        }
+                        Err(e) => {
+                            return Err(PersistenceError::ParseLedger {
+                                ledger_name: ledger_dir_name,
+                                message: format!("{}", e),
+                            });
                         }
                     }
                 }
@@ -328,60 +326,60 @@ impl PersistenceRepository for GitPersistence {
         let workdir = self
             .repo
             .workdir()
-            .ok_or_else(|| PersistenceError::Other("repository has no working directory".into()))?;
+            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
 
         let full_fs_path = workdir.join(&rel_file_path);
 
         // Serialize ledger to TOML
         let toml_text = toml::to_string_pretty(&ledger).map_err(|e| {
-            PersistenceError::Toml(format!("failed to serialize ledger {}: {}", ledger_id, e))
+            PersistenceError::DataError(format!("failed to serialize ledger {}: {}", ledger_id, e))
         })?;
 
         // Write to filesystem
         fs::write(&full_fs_path, toml_text.as_bytes()).map_err(|e| {
-            PersistenceError::Io(format!("failed to write {}: {}", full_fs_path.display(), e))
+            PersistenceError::DataError(format!("failed to write {}: {}", full_fs_path.display(), e))
         })?;
 
         // Update the git index
         let mut index = self
             .repo
             .index()
-            .map_err(|e| PersistenceError::Git(format!("failed to get index: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
 
         index
             .add_path(&rel_file_path)
-            .map_err(|e| PersistenceError::Git(format!("failed to add path to index: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to add path to index: {}", e)))?;
 
         index
             .write()
-            .map_err(|e| PersistenceError::Git(format!("failed to write index: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
 
         let tree_oid = index
             .write_tree()
-            .map_err(|e| PersistenceError::Git(format!("failed to write tree: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
 
         let tree = self
             .repo
             .find_tree(tree_oid)
-            .map_err(|e| PersistenceError::Git(format!("failed to find tree: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
 
         // Create signature
         let sig = self
             .repo
             .signature()
-            .map_err(|e| PersistenceError::Git(format!("failed to create signature: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
 
         // Determine parent commit (HEAD)
         let parent_commit = {
             let head = self
                 .repo
                 .head()
-                .map_err(|e| PersistenceError::Git(format!("failed to get HEAD: {}", e)))?;
+                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
             let target = head
                 .target()
-                .ok_or_else(|| PersistenceError::Other("HEAD has no target commit".into()))?;
+                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
             self.repo.find_commit(target).map_err(|e| {
-                PersistenceError::Git(format!("failed to find parent commit: {}", e))
+                PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
             })?
         };
 
@@ -395,7 +393,7 @@ impl PersistenceRepository for GitPersistence {
                 &tree,
                 &[&parent_commit],
             )
-            .map_err(|e| PersistenceError::Git(format!("failed to create commit: {}", e)))?;
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
 
         Ok(())
     }
@@ -448,10 +446,10 @@ impl PersistenceRepository for GitPersistence {
             match entry.kind() {
                 Some(ObjectType::Blob) => {
                     let blob = self.repo.find_blob(entry.id()).map_err(|e| {
-                        PersistenceError::Git(format!("failed to read blob {}: {}", name, e))
+                        PersistenceError::RepositoryError(format!("failed to read blob {}: {}", name, e))
                     })?;
                     let text = str::from_utf8(blob.content())
-                        .map_err(|e| PersistenceError::Utf8(format!("{}", e)))?;
+                        .map_err(|e| PersistenceError::DataError(format!("UTF-8 decode error: {}", e)))?;
                     match toml::from_str::<structs::Transaction>(text) {
                         Ok(tx) => transactions.push(tx),
                         Err(e) => eprintln!("failed to parse {}: {}", name, e),
