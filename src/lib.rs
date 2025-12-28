@@ -1,9 +1,9 @@
 use std::env;
-use std::path::Path;
 
 use crate::git_adapter::GitPersistence;
 use crate::traits::PersistenceRepository;
 
+mod accounting;
 mod commands;
 mod components;
 mod git_adapter;
@@ -12,9 +12,6 @@ mod traits;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    use structs::*;
-    use uuid::Uuid;
-
     let persistence = GitPersistence::new(None).unwrap();
     let group = persistence.load_group().unwrap();
     let ledgers = persistence.list_ledgers().unwrap();

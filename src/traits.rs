@@ -95,9 +95,6 @@ impl From<git2::Error> for PersistenceError {
     }
 }
 
-#[derive(Debug)]
-pub enum BusinessLogicError {}
-
 // ============================================================================
 // Result Types and Supporting Structures
 // ============================================================================
@@ -107,19 +104,6 @@ pub enum BusinessLogicError {}
 pub struct RefreshResult {
     /// Whether anything has changed in the remote storage
     pub has_changes: bool,
-}
-
-/// Represents a payment to settle debts
-#[derive(Debug)]
-pub struct Settlement {
-    /// Who pays
-    pub from_entity: Uuid,
-    /// Who receives
-    pub to_entity: Uuid,
-    /// How much
-    pub amount: f64,
-    /// Currency code
-    pub currency: String,
 }
 
 /// Result of validation operations
@@ -300,46 +284,4 @@ pub trait Validator {
 
     /// Ensure sum of all ratios equals 1 (within tolerance of 0.001)
     fn validate_split_ratios_sum(&self, ratios: &[Split]) -> Result<(), ValidationError>;
-}
-
-// ============================================================================
-// Business Logic Trait
-// ============================================================================
-
-/// Trait for business logic operations
-///
-/// Performs calculations and data transformations.
-/// Balance calculations, settlement optimization, share computations.
-/// Does not validate or persist (those are separate concerns).
-pub trait BusinessLogic {
-    /// Calculate who owes whom from a user's perspective
-    ///
-    /// Returns a map of entity UUID to amount where:
-    /// - Positive values = they owe you
-    /// - Negative values = you owe them
-    ///
-    /// Algorithm: For each transaction:
-    /// - If user paid: they are owed by each other participant for their share
-    /// - If user didn't pay: they owe the payer their share
-    fn calculate_balances(
-        &self,
-        ledger_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<HashMap<Uuid, f64>, BusinessLogicError>;
-
-    /// Calculate a user's share of a transaction
-    ///
-    /// Algorithm: Find user's ratio in split_ratios, multiply by transaction amount
-    /// Returns user's share amount (0.0 if user not in split)
-    fn get_user_share(&self, transaction: &Transaction, user_id: Uuid) -> f64;
-
-    /// Normalize split ratios to sum to 1
-    ///
-    /// Algorithm: Calculate total ratio, divide each by total
-    fn normalize_split_ratios(&self, ratios: Vec<Split>) -> Vec<Split>;
-
-    /// Optimize debt settlement (who pays whom, minimizing transactions)
-    ///
-    /// Returns list of settlements (from_entity, to_entity, amount)
-    fn calculate_settlements(&self, balances: HashMap<Uuid, f64>) -> Vec<Settlement>;
 }

@@ -56,40 +56,8 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
         .ok_or_else(|| "Selected ledger not found".to_string())?;
 
     // Calculate per-user balances from all transactions
-    let mut balances: std::collections::HashMap<Uuid, f64> = std::collections::HashMap::new();
-    let mut currency = String::from("USD");
-
-    for txn in transactions.iter() {
-        // Use the currency from the first transaction
-        if currency == "USD" {
-            currency = txn.currency_iso_4217.clone();
-        }
-
-        // Calculate user's share
-        let user_ratio = txn
-            .split_ratios
-            .iter()
-            .find(|s| s.entity_id == user_uuid)
-            .map(|s| s.ratio.numerator() as f64 / s.ratio.denominator() as f64)
-            .unwrap_or(0.0);
-
-        let user_share = txn.amount * user_ratio;
-
-        // If user paid, they are owed money by others
-        if txn.paid_by_entity == user_uuid {
-            // User is owed by each person in the split
-            for split in &txn.split_ratios {
-                if split.entity_id != user_uuid {
-                    let other_share = txn.amount
-                        * (split.ratio.numerator() as f64 / split.ratio.denominator() as f64);
-                    *balances.entry(split.entity_id).or_insert(0.0) += other_share;
-                }
-            }
-        } else if txn.paid_by_entity != user_uuid {
-            // User owes money to the person who paid
-            *balances.entry(txn.paid_by_entity).or_insert(0.0) -= user_share;
-        }
-    }
+    let balances = crate::accounting::calculate_balances(&transactions, user_uuid);
+    let currency = crate::accounting::get_primary_currency(&transactions);
 
     // Get the group entities to map UUIDs to names
     let group = state.group.lock().map_err(|e| e.to_string())?;
@@ -97,7 +65,7 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
     // Convert HashMap to Vec of (name, amount) pairs, filtering out the current user
     let mut balance_list: Vec<(String, f64)> = balances
         .into_iter()
-        .filter(|(_, amount)| amount.abs() > 0.01) // Filter out near-zero balances
+        .filter(|(_, amount): &(Uuid, f64)| amount.abs() > 0.01) // Filter out near-zero balances
         .filter_map(|(entity_id, amount)| {
             group
                 .entities
@@ -201,14 +169,7 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
             .unwrap_or_else(|| "Unknown".to_string());
 
         // Calculate user's share
-        let user_ratio = txn
-            .split_ratios
-            .iter()
-            .find(|s| s.entity_id == user_uuid)
-            .map(|s| s.ratio.numerator() as f64 / s.ratio.denominator() as f64)
-            .unwrap_or(0.0);
-
-        let user_share = txn.amount * user_ratio;
+        let user_share = crate::accounting::get_user_share(txn, user_uuid);
 
         // Format date
         let date = format!("{}", txn.transaction_datetime_rfc_3339);

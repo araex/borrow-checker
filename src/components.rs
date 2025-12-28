@@ -37,7 +37,7 @@ impl Header {
 
     pub fn build(self) -> String {
         html! {
-            nav class="bg-zinc-900 px-12 py-6 flex justify-between items-center border-b border-zinc-700" {
+            nav class="bg-zinc-900 px-6 py-6 flex justify-between items-center border-b border-zinc-700" {
                 div class="brand" {
                     h1 class="text-orange-500 font-bold tracking-[0.5rem] uppercase text-base" {
                         "Borrow Checker"
@@ -243,7 +243,7 @@ impl LedgerHeader {
 
     pub fn build(self) -> String {
         html! {
-            header class="px-12 py-8 flex justify-between items-end border-b border-zinc-700 bg-gradient-to-b from-zinc-900 to-transparent" id="ledger-header" {
+            header class="px-6 py-6 flex justify-between items-end border-b border-zinc-700 bg-gradient-to-b from-zinc-900 to-transparent" id="ledger-header" {
                 div class="title-group" {
                     span class="font-mono text-xs text-orange-500 uppercase tracking-wide" {
                         "LEDGER"
@@ -405,7 +405,7 @@ impl ExpenseForm {
                 }
 
                 // Form content - scrollable
-                div class="flex-1 px-8 py-6 overflow-y-auto" {
+                div class="flex-1 px-6 py-6 overflow-y-auto" {
                     // Back button
                     div class="mb-6" {
                         button
