@@ -1,29 +1,35 @@
-<nav class="bg-zinc-900 px-6 py-6 flex justify-between items-center border-b border-zinc-700">
-  <div class="brand">
-    <h1 class="text-orange-500 font-bold tracking-[0.5rem] uppercase text-base">
-      Borrow Checker
-    </h1>
-  </div>
-  {% if let Some(user_name) = current_user_name %}
-  <div class="flex items-center gap-6">
-    {% if !group_members.is_empty() %}
-    <div class="flex items-center gap-3">
-      <span class="text-zinc-500 text-sm">Group:</span>
-      <div class="flex gap-2">
-        {% for member in group_members %}
-        <span class="text-zinc-300 text-sm px-3 py-1 bg-zinc-800 rounded-full border border-zinc-700">
-          {{ member }}
-        </span>
-        {% endfor %}
-      </div>
+<nav
+    class="bg-zinc-900 px-6 py-6 flex justify-between items-center border-b border-zinc-700"
+>
+    <div class="brand">
+        <h1
+            class="text-orange-500 font-bold tracking-[0.5rem] uppercase text-base"
+        >
+            Borrow Checker
+        </h1>
+    </div>
+    {% if let Some(user_name) = current_user_name %}
+    <div class="flex items-center gap-6">
+        {% if !group_members.is_empty() %}
+        <div class="flex items-center gap-3">
+            <span class="text-zinc-500 text-sm">Group:</span>
+            <div class="flex gap-2">
+                {% for member in group_members %}
+                <span
+                    class="text-zinc-300 text-sm px-3 py-1 bg-zinc-800 rounded-full border border-zinc-700"
+                >
+                    {{ member }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="flex items-center gap-2">
+            <span class="text-zinc-500 text-sm">Logged in as:</span>
+            <span class="text-orange-400 font-semibold text-sm">
+                {{ user_name }}
+            </span>
+        </div>
     </div>
     {% endif %}
-    <div class="flex items-center gap-2">
-      <span class="text-zinc-500 text-sm">Logged in as:</span>
-      <span class="text-orange-400 font-semibold text-sm">
-        {{ user_name }}
-      </span>
-    </div>
-  </div>
-  {% endif %}
 </nav>

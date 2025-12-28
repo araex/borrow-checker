@@ -1,8 +1,6 @@
-use crate::structs::{Entity, Group, Ledger, LedgerWithTransactions, Split, Transaction};
-use std::collections::HashMap;
+use crate::structs::{Group, Ledger, Transaction};
 use std::error::Error;
 use std::fmt;
-use std::path::Path;
 use uuid::Uuid;
 
 // ============================================================================
@@ -106,43 +104,6 @@ pub struct RefreshResult {
     pub has_changes: bool,
 }
 
-/// Result of validation operations
-#[derive(Debug)]
-pub struct ValidationResult {
-    /// Whether validation passed
-    pub is_valid: bool,
-    /// List of validation errors (empty if is_valid is true)
-    pub errors: Vec<ValidationError>,
-}
-
-/// A single validation error
-#[derive(Debug)]
-pub struct ValidationError {
-    /// Field name or path (e.g., "split_ratios[0].entity_id")
-    pub field: String,
-    /// Human-readable error message
-    pub message: String,
-    /// Type of validation error
-    pub error_type: ValidationErrorType,
-}
-
-/// Types of validation errors
-#[derive(Debug)]
-pub enum ValidationErrorType {
-    /// Required field is missing
-    MissingField,
-    /// Invalid format
-    InvalidFormat,
-    /// UUID reference doesn't exist
-    InvalidReference,
-    /// Value is out of range or invalid
-    InvalidValue,
-    /// Duplicate ID found
-    DuplicateValue,
-    /// Sum mismatch (e.g., ratios don't sum to 1)
-    SumMismatch,
-}
-
 // ============================================================================
 // Persistence Trait
 // ============================================================================
@@ -217,71 +178,4 @@ pub trait PersistenceRepository {
 
     /// Refreshes local data from remote storage
     fn refresh(&self) -> Result<RefreshResult, PersistenceError>;
-}
-
-// ============================================================================
-// Validation Trait
-// ============================================================================
-
-/// Trait for validation operations
-///
-/// Validates data structures against business rules.
-/// Stateless - pure functions that check data integrity.
-/// Does not persist data or perform calculations.
-pub trait Validator {
-    // ------------------------------------------------------------------------
-    // Entity-level Validation
-    // ------------------------------------------------------------------------
-
-    /// Validate group configuration
-    ///
-    /// Checks:
-    /// - At least one entity exists
-    /// - All entity IDs are unique
-    /// - All entity display names are not empty
-    fn validate_group(&self, group: &Group) -> ValidationResult;
-
-    /// Validate ledger metadata
-    ///
-    /// Checks:
-    /// - Ledger ID is present
-    /// - Display name is not empty
-    /// - All participants exist in group
-    /// - Participants list is not empty
-    fn validate_ledger(&self, ledger: &Ledger, group: &Group) -> ValidationResult;
-
-    /// Validate all aspects of a transaction
-    ///
-    /// Checks:
-    /// - Transaction ID is present
-    /// - Paid-by entity exists in group and is ledger participant
-    /// - All split entities exist in group and are ledger participants
-    /// - Split ratios are positive and sum to ~1 (within tolerance)
-    /// - Currency code is valid ISO 4217
-    /// - Amount is positive
-    /// - Description is not empty
-    /// - Datetime is valid
-    fn validate_transaction(
-        &self,
-        transaction: &Transaction,
-        ledger: &Ledger,
-        group: &Group,
-    ) -> ValidationResult;
-
-    // ------------------------------------------------------------------------
-    // Field-level Validation
-    // ------------------------------------------------------------------------
-
-    /// Ensure a UUID reference exists in group entities
-    fn validate_entity_reference(
-        &self,
-        entity_id: Uuid,
-        group: &Group,
-    ) -> Result<(), ValidationError>;
-
-    /// Validate ISO 4217 currency codes (3-letter codes)
-    fn validate_currency(&self, code: &str) -> Result<(), ValidationError>;
-
-    /// Ensure sum of all ratios equals 1 (within tolerance of 0.001)
-    fn validate_split_ratios_sum(&self, ratios: &[Split]) -> Result<(), ValidationError>;
 }

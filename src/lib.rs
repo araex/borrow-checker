@@ -9,6 +9,7 @@ mod components;
 mod git_adapter;
 mod structs;
 mod traits;
+mod validator;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
