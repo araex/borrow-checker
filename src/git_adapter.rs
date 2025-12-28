@@ -11,11 +11,12 @@ use uuid::Uuid;
 
 /// Git-backed implementation of PersistenceRepository.
 ///
-/// The repository is opened during construction. A map from ledger UUID -> path in the repo
-/// is maintained and built when listing/loading ledgers.
+/// The repository is opened during construction. A map from ledger UUID -> relative path
+/// (path relative to repository root, e.g. "ledgers/39C3") is maintained and built when
+/// listing/loading ledgers.
 pub struct GitPersistence {
     repo: Repository,
-    /// Map from ledger id -> path (relative path under repo root, e.g. "ledgers/39C3")
+    /// Map from ledger id -> relative path (under repo root, e.g. "ledgers/39C3")
     ledger_map: Mutex<HashMap<Uuid, PathBuf>>,
 
     /// The path under repo root where ledgers live (default "ledgers")
@@ -126,19 +127,12 @@ impl GitPersistence {
         }
     }
 
-    /// Build the ledger map (ledger UUID -> path) by scanning the ledgers folder.
+    /// Build the ledger map by scanning the ledgers folder.
     ///
-    /// This will clear and repopulate the internal ledger_map.
+    /// This will delegate to list_ledgers which updates the internal map for successfully parsed ledgers.
     fn build_ledger_map(&self) -> Result<(), PersistenceError> {
-        let ledgers = self.list_ledgers()?; // list_ledgers will populate entries in result
-        let mut map = self.ledger_map.lock().unwrap();
-        map.clear();
-        for ledger in ledgers {
-            map.insert(
-                ledger.id,
-                self.ledgers_root.clone().join(ledger.display_name.clone()),
-            );
-        }
+        // list_ledgers updates the internal ledger_map with relative paths for successfully parsed ledgers.
+        let _ = self.list_ledgers()?;
         Ok(())
     }
 }
@@ -178,9 +172,11 @@ impl PersistenceRepository for GitPersistence {
         };
 
         let mut results = Vec::new();
+        // Collect successful ledger id -> relative-path entries so we can update the ledger_map as we go.
+        let mut successful_map_entries: Vec<(Uuid, PathBuf)> = Vec::new();
 
         for entry in ledgers_tree.iter() {
-            let ledger_name = match entry.name() {
+            let ledger_dir_name = match entry.name() {
                 Some(n) => n.to_string(),
                 None => {
                     eprintln!("skipping ledger entry with no name");
@@ -191,18 +187,23 @@ impl PersistenceRepository for GitPersistence {
             match entry.kind() {
                 Some(ObjectType::Tree) => {
                     // peel to child tree
-                    let child_obj = entry.to_object(&self.repo).map_err(|e| {
-                        PersistenceError::Git(format!(
-                            "failed to read ledger folder {}: {}",
-                            ledger_name, e
-                        ))
-                    })?;
-                    let child_tree = child_obj.peel_to_tree().map_err(|e| {
-                        PersistenceError::Git(format!(
-                            "failed to peel ledger folder {} to tree: {}",
-                            ledger_name, e
-                        ))
-                    })?;
+                    let child_obj = match entry.to_object(&self.repo) {
+                        Ok(o) => o,
+                        Err(e) => {
+                            eprintln!("failed to read ledger folder {}: {}", ledger_dir_name, e);
+                            continue;
+                        }
+                    };
+                    let child_tree = match child_obj.peel_to_tree() {
+                        Ok(t) => t,
+                        Err(e) => {
+                            eprintln!(
+                                "failed to peel ledger folder {} to tree: {}",
+                                ledger_dir_name, e
+                            );
+                            continue;
+                        }
+                    };
 
                     // find .ledger.toml marker
                     let mut ledger_blob_entry_opt: Option<git2::TreeEntry> = None;
@@ -222,59 +223,76 @@ impl PersistenceRepository for GitPersistence {
 
                     match ledger_blob_entry.kind() {
                         Some(ObjectType::Blob) => {
-                            let blob =
-                                self.repo.find_blob(ledger_blob_entry.id()).map_err(|e| {
-                                    PersistenceError::Git(format!(
-                                        "failed to read .ledger.toml blob in {}: {}",
-                                        ledger_name, e
-                                    ))
-                                })?;
-                            let text = str::from_utf8(blob.content())
-                                .map_err(|e| PersistenceError::Utf8(format!("{}", e)))?;
-                            match toml::from_str::<structs::Ledger>(text) {
-                                Ok(ledger) => results.push(ledger),
+                            let blob = match self.repo.find_blob(ledger_blob_entry.id()) {
+                                Ok(b) => b,
                                 Err(e) => {
                                     eprintln!(
-                                        "failed to parse .ledger.toml in {}: {}",
-                                        ledger_name, e
+                                        "failed to read .ledger.toml blob in {}: {}",
+                                        ledger_dir_name, e
                                     );
-                                    // return a parse error rather than silently continue
-                                    return Err(PersistenceError::ParseLedger {
-                                        ledger_name,
-                                        message: format!("{}", e),
-                                    });
+                                    continue;
+                                }
+                            };
+                            let text = match str::from_utf8(blob.content()) {
+                                Ok(t) => t,
+                                Err(e) => {
+                                    eprintln!(
+                                        ".ledger.toml in {} is not valid utf8: {}",
+                                        ledger_dir_name, e
+                                    );
+                                    continue;
+                                }
+                            };
+                            match toml::from_str::<structs::Ledger>(text) {
+                                Ok(ledger) => {
+                                    // record successful ledger; store relative path using the tree entry name (ledger folder name)
+                                    let rel_path = self.ledgers_root.join(ledger_dir_name.clone());
+                                    successful_map_entries.push((ledger.id, rel_path));
+                                    results.push(ledger);
+                                }
+                                Err(e) => {
+                                    // Log parse error but continue scanning other ledgers.
+                                    eprintln!(
+                                        "failed to parse .ledger.toml in {}: {}",
+                                        ledger_dir_name, e
+                                    );
+                                    continue;
                                 }
                             }
                         }
                         Some(k) => {
                             eprintln!(
                                 "found .ledger.toml in {} but it's not a blob (kind={:?})",
-                                ledger_name, k
+                                ledger_dir_name, k
                             );
                         }
                         None => {
-                            eprintln!(".ledger.toml entry in {} has no object type", ledger_name);
+                            eprintln!(
+                                ".ledger.toml entry in {} has no object type",
+                                ledger_dir_name
+                            );
                         }
                     }
                 }
                 Some(kind) => {
-                    eprintln!("skipping non-tree ledger entry {}: {:?}", ledger_name, kind);
+                    eprintln!(
+                        "skipping non-tree ledger entry {}: {:?}",
+                        ledger_dir_name, kind
+                    );
                 }
                 None => {
-                    eprintln!("ledger entry {} has no object type", ledger_name);
+                    eprintln!("ledger entry {} has no object type", ledger_dir_name);
                 }
             }
         }
 
-        // rebuild internal map
+        // Update internal map with successfully parsed ledgers (store relative paths).
         {
             let mut map = self.ledger_map.lock().unwrap();
+            // Clear existing map and insert all successful entries to keep in sync.
             map.clear();
-            for ledger in &results {
-                map.insert(
-                    ledger.id,
-                    self.ledgers_root.clone().join(ledger.display_name.clone()),
-                );
+            for (id, rel_path) in successful_map_entries {
+                map.insert(id, rel_path);
             }
         }
 
@@ -288,9 +306,9 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn update_ledger(&self, ledger: structs::Ledger) -> Result<(), PersistenceError> {
-        // Find ledger path in map
+        // Find ledger relative path in map (path is relative to repo root)
         let ledger_id = ledger.id;
-        let ledger_path = {
+        let ledger_rel_path = {
             let map = self.ledger_map.lock().unwrap();
             match map.get(&ledger_id) {
                 Some(p) => p.clone(),
@@ -304,7 +322,7 @@ impl PersistenceRepository for GitPersistence {
         };
 
         // Relative path to the marker file in the repo (e.g. "ledgers/39C3/.ledger.toml")
-        let rel_file_path = ledger_path.join(".ledger.toml");
+        let rel_file_path = ledger_rel_path.join(".ledger.toml");
 
         // Ensure repository has a working directory
         let workdir = self
@@ -394,7 +412,7 @@ impl PersistenceRepository for GitPersistence {
         &self,
         ledger_id: Uuid,
     ) -> Result<Vec<structs::Transaction>, PersistenceError> {
-        // Find ledger path in map
+        // Find ledger relative path in map (path is relative to repo root)
         let map = self.ledger_map.lock().unwrap();
         let ledger_path = match map.get(&ledger_id) {
             Some(p) => p.clone(),
@@ -407,7 +425,7 @@ impl PersistenceRepository for GitPersistence {
         };
         drop(map);
 
-        // Get root tree and find the subtree for the ledger path
+        // Get root tree and find the subtree for the ledger relative path
         let root_tree = self.get_root_tree()?;
         let ledger_tree = self.subtree_from_tree(&root_tree, &ledger_path)?;
 

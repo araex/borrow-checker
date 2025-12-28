@@ -21,6 +21,10 @@ pub fn run() {
     let user_id = group.entities[0].id;
     let transactions = persistence.list_transactions(ledger_id).unwrap();
 
+    // let mut clone = ledgers[0].clone();
+    // clone.display_name = String::from("Fooo");
+    // let _ = persistence.update_ledger(clone);
+
     tauri::Builder::default()
         .manage(structs::AppState {
             group: std::sync::Mutex::new(group),
