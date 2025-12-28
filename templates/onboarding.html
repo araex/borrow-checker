@@ -1,0 +1,109 @@
+<div class="flex flex-col items-center justify-center min-h-screen p-6">
+    <div class="w-full max-w-2xl">
+        <!-- Header -->
+        <div class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-gray-200 mb-2">Welcome to Borrow Checker</h1>
+            <p class="text-lg text-gray-400">Join a group by connecting to a repository</p>
+        </div>
+
+        <!-- SSH Key Display -->
+        <div class="bg-zinc-900 border border-zinc-700 rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-200 mb-3">Step 1: Add Your SSH Key</h2>
+            <p class="text-sm text-gray-400 mb-4">
+                Copy this SSH public key and add it to your Git provider (GitHub, GitLab, etc.) 
+                to grant this app access to your repository.
+            </p>
+            <div class="relative">
+                <pre id="ssh-key-display" class="bg-black border border-zinc-700 p-4 rounded text-xs overflow-x-auto mb-3 font-mono text-gray-300">{{ ssh_public_key }}</pre>
+                <button 
+                    id="copy-key-btn"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors"
+                    onclick="
+                        navigator.clipboard.writeText(document.getElementById('ssh-key-display').textContent);
+                        this.textContent = '✓ Copied!';
+                        setTimeout(() => this.textContent = 'Copy to Clipboard', 2000);
+                    "
+                >
+                    Copy to Clipboard
+                </button>
+            </div>
+        </div>
+
+        <!-- Repository URL Input -->
+        <div class="bg-zinc-900 border border-zinc-700 rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-200 mb-3">Step 2: Enter Repository URL</h2>
+            <p class="text-sm text-gray-400 mb-4">
+                Provide the SSH or HTTPS URL of your group's repository.
+            </p>
+            <form id="onboarding-form" onsubmit="return false;">
+                <input 
+                    type="text" 
+                    id="repo-url" 
+                    name="url"
+                    placeholder="git@github.com:username/repo.git"
+                    class="w-full px-4 py-2 bg-black border border-zinc-700 text-gray-200 placeholder-gray-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                    required
+                />
+                <button 
+                    id="join-btn"
+                    type="button"
+                    class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded transition-colors"
+                    hx-tauri-invoke="join_group"
+                    hx-include="#repo-url"
+                    hx-trigger="click"
+                    hx-swap="none"
+                >
+                    Join Group
+                </button>
+            </form>
+        </div>
+
+        <!-- Loading Spinner (hidden by default) -->
+        <div id="loading-spinner" class="hidden bg-zinc-900 border border-zinc-700 rounded-lg shadow-md p-6 mb-6">
+            <div class="flex items-center justify-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <p class="ml-4 text-gray-300">Cloning repository and validating structure...</p>
+            </div>
+        </div>
+
+        <!-- Error Display -->
+        <div id="error-display" class="hidden bg-red-950 border border-red-800 rounded-lg p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-300">Error</h3>
+                    <p id="error-message" class="mt-1 text-sm text-red-400"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Handle htmx events for loading spinner and error display
+    document.body.addEventListener('htmx:beforeRequest', function(evt) {
+        if (evt.detail.elt && evt.detail.elt.id === 'join-btn') {
+            document.getElementById('loading-spinner').classList.remove('hidden');
+            document.getElementById('error-display').classList.add('hidden');
+            document.getElementById('join-btn').disabled = true;
+        }
+    });
+    
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        if (evt.detail.elt && evt.detail.elt.id === 'join-btn') {
+            document.getElementById('loading-spinner').classList.add('hidden');
+            document.getElementById('join-btn').disabled = false;
+            
+            if (!evt.detail.successful) {
+                // Show error
+                const errorMsg = evt.detail.xhr?.responseText || 'An unexpected error occurred';
+                document.getElementById('error-message').textContent = errorMsg;
+                document.getElementById('error-display').classList.remove('hidden');
+            }
+        }
+    });
+</script>

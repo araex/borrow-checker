@@ -1,10 +1,14 @@
-<div
-    id="ledger-header"
-    hx-tauri-invoke="render_ledger_header"
-    hx-trigger="load"
->{{ ledger_header|safe }}</div>
-<div
-    id="expense-list"
-    hx-tauri-invoke="render_transactions"
-    hx-trigger="load"
->{{ transactions|safe }}</div>
+<div id="header">{{ header|safe }}</div>
+
+<main id="main-content" class="relative overflow-y-auto flex flex-col z-10">
+    <div
+        id="ledger-header"
+        hx-tauri-invoke="render_ledger_header"
+        hx-trigger="load"
+    >{{ ledger_header|safe }}</div>
+    <div
+        id="expense-list"
+        hx-tauri-invoke="render_transactions"
+        hx-trigger="load"
+    >{{ transactions|safe }}</div>
+</main>

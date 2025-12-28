@@ -1,21 +1,79 @@
 use crate::components::{Header, LedgerHeader, MainContent, Settings, Transaction};
+use crate::config::save_config;
+use crate::repo_manager::RepoManager;
 use crate::structs::AppState;
 use uuid::Uuid;
+
+/// Get the SSH public key for display during onboarding
+#[tauri::command]
+pub fn get_ssh_public_key() -> Result<String, String> {
+    crate::ssh_keys::get_public_key_content()
+        .map(|key| key.trim().to_string())
+        .map_err(|e| format!("Failed to read SSH public key: {}", e))
+}
+
+/// Check if the user has completed onboarding
+#[tauri::command]
+pub fn is_onboarded(state: tauri::State<AppState>) -> Result<bool, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    Ok(config.local_repo_path.is_some())
+}
+
+/// Join a group by cloning the repository and validating its structure
+#[tauri::command]
+pub async fn join_group(
+    url: String,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("Attempting to join group with URL: {}", url);
+
+    // Clone the repository in a blocking thread to avoid blocking the UI
+    let url_clone = url.clone();
+    let repo_path =
+        tauri::async_runtime::spawn_blocking(move || RepoManager::clone_repository(&url_clone))
+            .await
+            .map_err(|e| format!("Task join error: {}", e))??;
+
+    // Validate repository structure
+    RepoManager::validate_repo_structure(&repo_path)?;
+
+    // Update config
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    config.group_remote_url = url.clone();
+    config.local_repo_path = Some(repo_path);
+
+    // Save config to disk
+    save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
+
+    log::info!("Successfully joined group, restarting app");
+
+    // Spawn restart in a separate thread so we can return success first
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        app_handle.restart();
+    });
+    Ok(())
+}
 
 #[tauri::command]
 pub fn render_header(state: tauri::State<AppState>) -> Result<String, String> {
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
-    let user_uuid = state.user_id;
+
+    // Handle case where not onboarded
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
+    let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = state.user_id.ok_or("Not onboarded")?;
 
     // Use first ledger's name if available, otherwise placeholder
-    let ledger_name = ledgers
+    let ledger_name = ledgers_ref
         .first()
         .map(|l| l.display_name.clone())
         .unwrap_or_else(|| "No Ledger".to_string());
 
     // Get current user's display name
-    let current_user_name = group
+    let current_user_name = group_ref
         .entities
         .iter()
         .find(|e| e.id == user_uuid)
@@ -23,7 +81,7 @@ pub fn render_header(state: tauri::State<AppState>) -> Result<String, String> {
         .unwrap_or_else(|| "Unknown User".to_string());
 
     // Get other group members (excluding current user)
-    let group_members: Vec<String> = group
+    let group_members: Vec<String> = group_ref
         .entities
         .iter()
         .filter(|e| e.id != user_uuid)
@@ -45,29 +103,34 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
     let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
 
+    // Handle case where not onboarded
+    let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
+    let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = state.user_id.ok_or("Not onboarded")?;
+
     // Get current ledger from state
     let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
-    let user_uuid = state.user_id;
 
     // Find the ledger
-    let ledger = ledgers
+    let ledger = ledgers_ref
         .iter()
         .find(|l| l.id == ledger_uuid)
         .ok_or_else(|| "Selected ledger not found".to_string())?;
 
     // Calculate per-user balances from all transactions
-    let balances = crate::accounting::calculate_balances(&transactions, user_uuid);
-    let currency = crate::accounting::get_primary_currency(&transactions);
+    let balances = crate::accounting::calculate_balances(&transactions_ref, user_uuid);
+    let currency = crate::accounting::get_primary_currency(&transactions_ref);
 
     // Get the group entities to map UUIDs to names
     let group = state.group.lock().map_err(|e| e.to_string())?;
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
 
     // Convert HashMap to Vec of (name, amount) pairs, filtering out the current user
     let mut balance_list: Vec<(String, f64)> = balances
         .into_iter()
         .filter(|(_, amount): &(Uuid, f64)| amount.abs() > 0.01) // Filter out near-zero balances
         .filter_map(|(entity_id, amount)| {
-            group
+            group_ref
                 .entities
                 .iter()
                 .find(|e| e.id == entity_id)
@@ -83,7 +146,7 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
     });
 
     // Collect all available ledgers for the dropdown
-    let available_ledgers: Vec<(String, String)> = ledgers
+    let available_ledgers: Vec<(String, String)> = ledgers_ref
         .iter()
         .map(|l| (l.id.to_string(), l.display_name.clone()))
         .collect();
@@ -105,17 +168,21 @@ pub fn switch_ledger(ledger_id: String, state: tauri::State<AppState>) -> Result
 
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
-    let user_uuid = state.user_id;
+
+    // Handle case where not onboarded
+    let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = state.user_id.ok_or("Not onboarded")?;
 
     // Find the ledger with the matching ID
-    let ledger_name = ledgers
+    let ledger_name = ledgers_ref
         .iter()
         .find(|l| l.id == uuid)
         .map(|l| l.display_name.clone())
         .unwrap_or_else(|| "Unknown Ledger".to_string());
 
     // Get current user's display name
-    let current_user_name = group
+    let current_user_name = group_ref
         .entities
         .iter()
         .find(|e| e.id == user_uuid)
@@ -123,7 +190,7 @@ pub fn switch_ledger(ledger_id: String, state: tauri::State<AppState>) -> Result
         .unwrap_or_else(|| "Unknown User".to_string());
 
     // Get other group members (excluding current user)
-    let group_members: Vec<String> = group
+    let group_members: Vec<String> = group_ref
         .entities
         .iter()
         .filter(|e| e.id != user_uuid)
@@ -146,12 +213,17 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
     let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
 
+    // Handle case where not onboarded
+    let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
+    let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = state.user_id.ok_or("Not onboarded")?;
+
     // Get current ledger and user from state
     let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
-    let user_uuid = state.user_id;
 
-    // Find the ledger
-    let ledger_with_txns = ledgers
+    // Find the ledger (just for validation)
+    let _ledger_with_txns = ledgers_ref
         .iter()
         .find(|l| l.id == ledger_uuid)
         .ok_or_else(|| "Selected ledger not found".to_string())?;
@@ -159,9 +231,9 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
     let mut html = String::from(r#"<section id="expense-list" class="flex flex-col">"#);
 
     // Render each transaction
-    for txn in transactions.iter() {
+    for txn in transactions_ref.iter() {
         // Find the payer's name
-        let payer_name = group
+        let payer_name = group_ref
             .entities
             .iter()
             .find(|e| e.id == txn.paid_by_entity)
@@ -215,25 +287,30 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
     let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
 
+    // Handle case where not onboarded
+    let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
+    let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
+
     let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
 
     // Parse expense ID
     let expense_uuid = Uuid::parse_str(&expense_id).map_err(|e| e.to_string())?;
 
-    // Find the ledger
-    let ledger = ledgers
+    // Find the ledger (just for validation)
+    let _ledger = ledgers_ref
         .iter()
         .find(|l| l.id == ledger_uuid)
         .ok_or_else(|| "Selected ledger not found".to_string())?;
 
     // Find the transaction
-    let txn = transactions
+    let txn = transactions_ref
         .iter()
         .find(|t| t.id == expense_uuid)
         .ok_or_else(|| "Transaction not found".to_string())?;
 
     // Get available participants from the group
-    let participants: Vec<(String, String)> = group
+    let participants: Vec<(String, String)> = group_ref
         .entities
         .iter()
         .map(|e| (e.id.to_string(), e.display_name.clone()))
@@ -260,10 +337,14 @@ pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> 
     let group = state.group.lock().map_err(|e| e.to_string())?;
     let config = state.config.lock().map_err(|e| e.to_string())?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
-    let user_uuid = state.user_id;
+
+    // Handle case where not onboarded
+    let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = state.user_id.ok_or("Not onboarded")?;
 
     // Get current user's display name
-    let user_name = group
+    let user_name = group_ref
         .entities
         .iter()
         .find(|e| e.id == user_uuid)
@@ -271,21 +352,18 @@ pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> 
         .unwrap_or_else(|| "Unknown User".to_string());
 
     // Get all group members
-    let group_members: Vec<String> = group
+    let group_members: Vec<String> = group_ref
         .entities
         .iter()
         .map(|e| e.display_name.clone())
         .collect();
 
     // Get all ledger names
-    let ledger_names: Vec<String> = ledgers
-        .iter()
-        .map(|l| l.display_name.clone())
-        .collect();
+    let ledger_names: Vec<String> = ledgers_ref.iter().map(|l| l.display_name.clone()).collect();
 
     // Get current ledger name
     let current_ledger = current_ledger_id
-        .and_then(|id| ledgers.iter().find(|l| l.id == id))
+        .and_then(|id| ledgers_ref.iter().find(|l| l.id == id))
         .map(|l| l.display_name.clone())
         .unwrap_or_else(|| "Unknown Ledger".to_string());
 
@@ -315,14 +393,40 @@ pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> 
 
 #[tauri::command]
 pub fn render_main_content(state: tauri::State<AppState>) -> Result<String, String> {
-    // Render both ledger header and transactions
+    log::info!("render_main_content called");
+    use crate::components::OnboardingScreen;
+
+    // Check if user is onboarded
+    let is_onboarded = {
+        let config = state.config.lock().map_err(|e| e.to_string())?;
+        config.local_repo_path.is_some()
+    };
+
+    log::info!("User onboarded status: {}", is_onboarded);
+
+    if !is_onboarded {
+        log::info!("Rendering onboarding screen");
+        // Show onboarding screen
+        let ssh_key = crate::ssh_keys::get_public_key_content()
+            .unwrap_or_else(|_| "Unable to read public key".to_string())
+            .trim()
+            .to_string();
+
+        let onboarding = OnboardingScreen::new().ssh_public_key(ssh_key).build();
+
+        return Ok(onboarding);
+    }
+
+    // Render header, ledger header and transactions
+    let header = render_header(state.clone())?;
     let ledger_header = render_ledger_header(state.clone())?;
     let transactions = render_transactions(state)?;
-    
+
     let content = MainContent::new()
+        .header(header)
         .ledger_header(ledger_header)
         .transactions(transactions)
         .build();
-    
+
     Ok(content)
 }

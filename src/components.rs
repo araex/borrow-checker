@@ -347,6 +347,7 @@ impl Default for Settings {
 #[derive(Template)]
 #[template(path = "main_content.html")]
 pub struct MainContent {
+    header: String,
     ledger_header: String,
     transactions: String,
 }
@@ -354,9 +355,15 @@ pub struct MainContent {
 impl MainContent {
     pub fn new() -> Self {
         Self {
+            header: String::new(),
             ledger_header: String::new(),
             transactions: String::new(),
         }
+    }
+
+    pub fn header(mut self, header: impl Into<String>) -> Self {
+        self.header = header.into();
+        self
     }
 
     pub fn ledger_header(mut self, header: impl Into<String>) -> Self {
@@ -376,6 +383,36 @@ impl MainContent {
 }
 
 impl Default for MainContent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Template)]
+#[template(path = "onboarding.html")]
+pub struct OnboardingScreen {
+    ssh_public_key: String,
+}
+
+impl OnboardingScreen {
+    pub fn new() -> Self {
+        Self {
+            ssh_public_key: String::new(),
+        }
+    }
+
+    pub fn ssh_public_key(mut self, key: impl Into<String>) -> Self {
+        self.ssh_public_key = key.into();
+        self
+    }
+
+    pub fn build(self) -> String {
+        self.render()
+            .unwrap_or_else(|e| format!("Template error: {}", e))
+    }
+}
+
+impl Default for OnboardingScreen {
     fn default() -> Self {
         Self::new()
     }

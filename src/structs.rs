@@ -7,11 +7,11 @@ use uuid::Uuid;
 
 pub struct AppState {
     pub config: Mutex<AppConfig>,
-    pub group: Mutex<Group>,
-    pub ledgers: Mutex<Vec<Ledger>>,
-    pub transactions: Mutex<Vec<Transaction>>,
+    pub group: Mutex<Option<Group>>,
+    pub ledgers: Mutex<Option<Vec<Ledger>>>,
+    pub transactions: Mutex<Option<Vec<Transaction>>>,
     pub current_ledger_id: Mutex<Option<Uuid>>,
-    pub user_id: Uuid,
+    pub user_id: Option<Uuid>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

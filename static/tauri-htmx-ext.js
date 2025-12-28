@@ -14,9 +14,17 @@ window.addEventListener("DOMContentLoaded", () => {
 
       switch (name) {
         case "htmx:load":
+        case "htmx:afterSwap":
           registerInvokeTiggers(parent);
           registerTauriListeners(parent);
           registerTauriEmitters(parent);
+          break;
+        case "htmx:trigger":
+          // Check if this element has a tauri invoke command
+          if (parent && parent.hasAttribute && parent.hasAttribute("hx-tauri-invoke")) {
+            callInvoke(parent);
+            return false; // Prevent default htmx processing
+          }
           break;
       }
     },
@@ -27,7 +35,6 @@ function registerInvokeTiggers(parent) {
   parent.querySelectorAll("[hx-tauri-invoke]").forEach((el) => {
     let nodeData = api.getInternalData(el);
     let triggerSpecs = api.getTriggerSpecs(el);
-    console.log(triggerSpecs);
 
     triggerSpecs.forEach((ts) => {
       // since we're already in the load event we call it now
@@ -48,14 +55,22 @@ function callInvoke(el) {
   let target = api.getTarget(el);
   let input = api.getInputValues(el);
 
+  // Trigger beforeRequest event to show spinner and disable button
+  api.triggerEvent(el, "htmx:beforeRequest", { elt: el });
+
   invoke(handle, input.values).then((response) => {
     if (response) {
       api.swap(target, response, swapSpec);
     }
 
     api.settleImmediately(settleInfo.tasks);
+    api.triggerEvent(el, "htmx:afterRequest", { successful: true });
   }).catch((error) => {
     console.error("Invoke error:", error);
+    api.triggerEvent(el, "htmx:afterRequest", { 
+      successful: false, 
+      xhr: { responseText: error.toString() } 
+    });
     api.swap(target, `<div class="text-red-500 p-4">Error: ${error}</div>`, swapSpec);
   });
 }

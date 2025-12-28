@@ -8,6 +8,8 @@ use std::path::PathBuf;
 pub struct AppConfig {
     /// The remote URL of the group repository
     pub group_remote_url: String,
+    /// The local path where the cloned repository lives
+    pub local_repo_path: Option<PathBuf>,
 }
 
 impl AppConfig {
@@ -16,6 +18,7 @@ impl AppConfig {
         AppConfig {
             // Hardcoded for now, will be user-configurable later
             group_remote_url: String::from("https://github.com/araex/borrow-checker-testdata.git"),
+            local_repo_path: None,
         }
     }
 }
