@@ -11,11 +11,14 @@ tauri-build = { version = "2.5.3", features = [] }
 
 [dependencies]
 askama = "0.15"
+dirs = "5.0"
 git2 = { version = "0.20.3", features = ["ssh", "https"] }
 log = "0.4"
+rand = "0.8"
 rational = {version = "1.8", features = ["serde"] }
 serde = "1"
 serde_json = "1.0"
+ssh-key = { version = "0.6", features = ["std", "ed25519", "rand_core"] }
 tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 toml = "0.9"

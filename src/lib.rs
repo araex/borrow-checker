@@ -7,12 +7,15 @@ mod accounting;
 mod commands;
 mod components;
 mod git_adapter;
+mod ssh_keys;
 mod structs;
 mod traits;
 mod validator;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    ssh_keys::ensure_ssh_keys().expect("Failed to ensure SSH keys");
+
     let persistence = GitPersistence::new(None).unwrap();
     let group = persistence.load_group().unwrap();
     let ledgers = persistence.list_ledgers().unwrap();
