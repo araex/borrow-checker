@@ -135,22 +135,16 @@ impl GitPersistence {
         let _ = self.list_ledgers()?;
         Ok(())
     }
-}
 
-impl PersistenceRepository for GitPersistence {
-    // ---------------- Group Operations ----------------
-
-    fn load_group(&self) -> Result<structs::Group, PersistenceError> {
-        let text = self.read_blob_text(Path::new("group.toml"))?;
-        let group: structs::Group =
-            toml::from_str(&text).map_err(|e| PersistenceError::DataError(format!("TOML parse error: {}", e)))?;
-        Ok(group)
-    }
-
-    fn save_group(&self, group: &structs::Group) -> Result<(), PersistenceError> {
-        // Path to group.toml in the repo root
-        let rel_file_path = Path::new("group.toml");
-
+    /// Helper: Persist changes to a file and commit them to git
+    ///
+    /// Writes the serialized content to disk, stages it in git index, and creates a commit.
+    fn persist_and_commit(
+        &self,
+        rel_file_path: &Path,
+        content: &str,
+        commit_message: &str,
+    ) -> Result<(), PersistenceError> {
         // Ensure repository has a working directory
         let workdir = self
             .repo
@@ -159,13 +153,8 @@ impl PersistenceRepository for GitPersistence {
 
         let full_fs_path = workdir.join(rel_file_path);
 
-        // Serialize group to TOML
-        let toml_text = toml::to_string_pretty(&group).map_err(|e| {
-            PersistenceError::DataError(format!("failed to serialize group: {}", e))
-        })?;
-
         // Write to filesystem
-        fs::write(&full_fs_path, toml_text.as_bytes()).map_err(|e| {
+        fs::write(&full_fs_path, content.as_bytes()).map_err(|e| {
             PersistenceError::DataError(format!("failed to write {}: {}", full_fs_path.display(), e))
         })?;
 
@@ -218,13 +207,33 @@ impl PersistenceRepository for GitPersistence {
                 Some("HEAD"),
                 &sig,
                 &sig,
-                "Update group configuration",
+                commit_message,
                 &tree,
                 &[&parent_commit],
             )
             .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
 
         Ok(())
+    }
+}
+
+impl PersistenceRepository for GitPersistence {
+    // ---------------- Group Operations ----------------
+
+    fn load_group(&self) -> Result<structs::Group, PersistenceError> {
+        let text = self.read_blob_text(Path::new("group.toml"))?;
+        let group: structs::Group =
+            toml::from_str(&text).map_err(|e| PersistenceError::DataError(format!("TOML parse error: {}", e)))?;
+        Ok(group)
+    }
+
+    fn save_group(&self, group: &structs::Group) -> Result<(), PersistenceError> {
+        // Serialize group to TOML
+        let toml_text = toml::to_string_pretty(&group).map_err(|e| {
+            PersistenceError::DataError(format!("failed to serialize group: {}", e))
+        })?;
+
+        self.persist_and_commit(Path::new("group.toml"), &toml_text, "Update group configuration")
     }
 
     // ---------------- Ledger Operations ----------------
@@ -395,80 +404,12 @@ impl PersistenceRepository for GitPersistence {
         // Relative path to the marker file in the repo (e.g. "ledgers/39C3/.ledger.toml")
         let rel_file_path = ledger_rel_path.join(".ledger.toml");
 
-        // Ensure repository has a working directory
-        let workdir = self
-            .repo
-            .workdir()
-            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
-
-        let full_fs_path = workdir.join(&rel_file_path);
-
         // Serialize ledger to TOML
         let toml_text = toml::to_string_pretty(&ledger).map_err(|e| {
             PersistenceError::DataError(format!("failed to serialize ledger {}: {}", ledger_id, e))
         })?;
 
-        // Write to filesystem
-        fs::write(&full_fs_path, toml_text.as_bytes()).map_err(|e| {
-            PersistenceError::DataError(format!("failed to write {}: {}", full_fs_path.display(), e))
-        })?;
-
-        // Update the git index
-        let mut index = self
-            .repo
-            .index()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
-
-        index
-            .add_path(&rel_file_path)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to add path to index: {}", e)))?;
-
-        index
-            .write()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
-
-        let tree_oid = index
-            .write_tree()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
-
-        let tree = self
-            .repo
-            .find_tree(tree_oid)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
-
-        // Create signature
-        let sig = self
-            .repo
-            .signature()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
-
-        // Determine parent commit (HEAD)
-        let parent_commit = {
-            let head = self
-                .repo
-                .head()
-                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
-            let target = head
-                .target()
-                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
-            self.repo.find_commit(target).map_err(|e| {
-                PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
-            })?
-        };
-
-        // Commit
-        self.repo
-            .commit(
-                Some("HEAD"),
-                &sig,
-                &sig,
-                &format!("Update ledger {}", ledger_id),
-                &tree,
-                &[&parent_commit],
-            )
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
-
-        Ok(())
+        self.persist_and_commit(&rel_file_path, &toml_text, &format!("Update ledger {}", ledger_id))
     }
 
     fn delete_ledger(&self, _id: Uuid) -> Result<(), PersistenceError> {
@@ -562,90 +503,52 @@ impl PersistenceRepository for GitPersistence {
         let transaction_id = transaction.id;
         let rel_file_path = ledger_rel_path.join(format!("{}.toml", transaction_id));
 
-        // Ensure repository has a working directory
-        let workdir = self
-            .repo
-            .workdir()
-            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
-
-        let full_fs_path = workdir.join(&rel_file_path);
-
         // Serialize transaction to TOML
         let toml_text = toml::to_string_pretty(&transaction).map_err(|e| {
             PersistenceError::DataError(format!("failed to serialize transaction {}: {}", transaction_id, e))
         })?;
 
-        // Write to filesystem
-        fs::write(&full_fs_path, toml_text.as_bytes()).map_err(|e| {
-            PersistenceError::DataError(format!("failed to write {}: {}", full_fs_path.display(), e))
-        })?;
-
-        // Update the git index
-        let mut index = self
-            .repo
-            .index()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
-
-        index
-            .add_path(&rel_file_path)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to add path to index: {}", e)))?;
-
-        index
-            .write()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
-
-        let tree_oid = index
-            .write_tree()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
-
-        let tree = self
-            .repo
-            .find_tree(tree_oid)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
-
-        // Create signature
-        let sig = self
-            .repo
-            .signature()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
-
-        // Determine parent commit (HEAD)
-        let parent_commit = {
-            let head = self
-                .repo
-                .head()
-                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
-            let target = head
-                .target()
-                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
-            self.repo.find_commit(target).map_err(|e| {
-                PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
-            })?
-        };
-
-        // Commit
-        self.repo
-            .commit(
-                Some("HEAD"),
-                &sig,
-                &sig,
-                &format!("Add transaction {} to ledger {}", transaction_id, ledger_id),
-                &tree,
-                &[&parent_commit],
-            )
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
+        self.persist_and_commit(
+            &rel_file_path,
+            &toml_text,
+            &format!("Add transaction {} to ledger {}", transaction_id, ledger_id),
+        )?;
 
         Ok(transaction_id)
     }
 
     fn update_transaction(
         &self,
-        _ledger_id: Uuid,
-        _transaction: structs::Transaction,
+        ledger_id: Uuid,
+        transaction: structs::Transaction,
     ) -> Result<(), PersistenceError> {
-        Err(PersistenceError::UnsupportedOperation(
-            "update_transaction is not implemented for GitPersistence".into(),
-        ))
+        // Find ledger relative path in map (path is relative to repo root)
+        let ledger_rel_path = {
+            let map = self.ledger_map.lock().unwrap();
+            match map.get(&ledger_id) {
+                Some(p) => p.clone(),
+                None => {
+                    return Err(PersistenceError::NotFound(format!(
+                        "ledger id {} not found",
+                        ledger_id
+                    )));
+                }
+            }
+        };
+
+        let transaction_id = transaction.id;
+        let rel_file_path = ledger_rel_path.join(format!("{}.toml", transaction_id));
+
+        // Serialize transaction to TOML
+        let toml_text = toml::to_string_pretty(&transaction).map_err(|e| {
+            PersistenceError::DataError(format!("failed to serialize transaction {}: {}", transaction_id, e))
+        })?;
+
+        self.persist_and_commit(
+            &rel_file_path,
+            &toml_text,
+            &format!("Update transaction {} in ledger {}", transaction_id, ledger_id),
+        )
     }
 
     fn delete_transaction(
