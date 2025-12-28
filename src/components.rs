@@ -133,6 +133,7 @@ pub struct LedgerHeader {
     balances: Vec<(String, f64)>, // (user_name, amount) pairs
     currency: String,
     ledgers: Vec<(String, String)>, // (id, name) pairs
+    ledger_id: String,
 }
 
 impl LedgerHeader {
@@ -142,11 +143,17 @@ impl LedgerHeader {
             balances: Vec::new(),
             currency: String::from("USD"),
             ledgers: Vec::new(),
+            ledger_id: String::new(),
         }
     }
 
     pub fn ledger_name(mut self, name: impl Into<String>) -> Self {
         self.ledger_name = name.into();
+        self
+    }
+
+    pub fn ledger_id(mut self, ledger_id: impl Into<String>) -> Self {
+        self.ledger_id = ledger_id.into();
         self
     }
 

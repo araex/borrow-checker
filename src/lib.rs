@@ -39,6 +39,8 @@ pub fn run() {
         let user_id = group.entities[0].id;
         let transactions = persistence.list_transactions(ledger_id).unwrap();
 
+        drop(persistence);
+
         structs::AppState {
             config: std::sync::Mutex::new(config),
             group: std::sync::Mutex::new(Some(group)),
@@ -66,6 +68,7 @@ pub fn run() {
                 .level(log::LevelFilter::Debug)
                 .build(),
         )
+        .manage(GitPersistence::new(None).unwrap())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::render_header,

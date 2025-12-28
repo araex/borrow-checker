@@ -15,7 +15,7 @@ use uuid::Uuid;
 /// (path relative to repository root, e.g. "ledgers/39C3") is maintained and built when
 /// listing/loading ledgers.
 pub struct GitPersistence {
-    repo: Repository,
+    repo: Mutex<Repository>,
     /// Map from ledger id -> relative path (under repo root, e.g. "ledgers/39C3")
     ledger_map: Mutex<HashMap<Uuid, PathBuf>>,
 
@@ -30,7 +30,8 @@ impl GitPersistence {
         let path = match repo_path {
             Some(p) => p,
             None => {
-                let cwd = env::current_dir().map_err(|e| PersistenceError::DataError(format!("{}", e)))?;
+                let cwd = env::current_dir()
+                    .map_err(|e| PersistenceError::DataError(format!("{}", e)))?;
                 cwd.join("data/borrow-checker-testdata/")
             }
         };
@@ -39,92 +40,84 @@ impl GitPersistence {
             .map_err(|e| PersistenceError::RepositoryError(format!("{}: {}", path.display(), e)))?;
 
         Ok(GitPersistence {
-            repo,
+            repo: Mutex::new(repo),
             ledger_map: Mutex::new(HashMap::new()),
             ledgers_root: PathBuf::from("ledgers"),
         })
     }
 
     /// Resolve refs/heads/main or HEAD and return the repository root tree.
-    fn get_root_tree<'repo>(&'repo self) -> Result<Tree<'repo>, PersistenceError> {
-        let reference = self
-            .repo
+    fn get_root_tree<'repo>(
+        &self,
+        repo: &'repo Repository,
+    ) -> Result<Tree<'repo>, PersistenceError> {
+        let reference = repo
             .find_reference("refs/heads/main")
-            .or_else(|_| self.repo.head())
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find main or HEAD: {}", e)))?;
+            .or_else(|_| repo.head())
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to find main or HEAD: {}", e))
+            })?;
 
         let target_oid = reference.target().ok_or_else(|| {
             PersistenceError::RepositoryError("reference does not point to an object".into())
         })?;
 
-        let commit = self
-            .repo
-            .find_commit(target_oid)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find commit: {}", e)))?;
+        let commit = repo.find_commit(target_oid).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to find commit: {}", e))
+        })?;
 
-        let root_tree = commit
+        Ok(commit
             .tree()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get tree: {}", e)))?;
-        Ok(root_tree)
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get tree: {}", e)))?)
     }
 
     /// Given a tree and a path, return the subtree at that path.
     fn subtree_from_tree<'repo>(
-        &'repo self,
+        &self,
+        repo: &'repo Repository,
         tree: &Tree<'repo>,
         path: &Path,
     ) -> Result<Tree<'repo>, PersistenceError> {
-        let entry = tree
-            .get_path(path)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find path {:?}: {}", path, e)))?;
+        let entry = tree.get_path(path).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to find path {:?}: {}", path, e))
+        })?;
 
         match entry.kind() {
             Some(ObjectType::Tree) => {
-                let obj = entry
-                    .to_object(&self.repo)
-                    .map_err(|e| PersistenceError::RepositoryError(format!("to_object failed: {}", e)))?;
-                Ok(obj
-                    .peel_to_tree()
-                    .map_err(|e| PersistenceError::RepositoryError(format!("peel_to_tree failed: {}", e)))?)
+                let obj = entry.to_object(repo).map_err(|e| {
+                    PersistenceError::RepositoryError(format!("to_object failed: {}", e))
+                })?;
+                obj.peel_to_tree().map_err(|e| {
+                    PersistenceError::RepositoryError(format!("peel_to_tree failed: {}", e))
+                })
             }
-            Some(kind) => Err(PersistenceError::RepositoryError(format!(
-                "path {:?} is not a tree (kind={:?})",
-                path, kind
-            ))),
-            None => Err(PersistenceError::RepositoryError(format!(
-                "entry at {:?} has no object type",
+            _ => Err(PersistenceError::RepositoryError(format!(
+                "path {:?} is not a tree",
                 path
             ))),
         }
     }
 
     /// Helper: read a blob at `path_in_repo` (relative path under repo root) and return its text.
-    fn read_blob_text(&self, path_in_repo: &Path) -> Result<String, PersistenceError> {
-        let root_tree = self.get_root_tree()?;
+    fn read_blob_text(
+        &self,
+        repo: &Repository,
+        path_in_repo: &Path,
+    ) -> Result<String, PersistenceError> {
+        let root_tree = self.get_root_tree(repo)?;
+
         let entry = root_tree.get_path(path_in_repo).map_err(|_| {
             PersistenceError::NotFound(format!("{} not found", path_in_repo.display()))
         })?;
 
-        match entry.kind() {
-            Some(ObjectType::Blob) => {
-                let blob = self
-                    .repo
-                    .find_blob(entry.id())
-                    .map_err(|e| PersistenceError::RepositoryError(format!("failed to read blob: {}", e)))?;
-                let text = str::from_utf8(blob.content())
-                    .map_err(|e| PersistenceError::DataError(format!("UTF-8 decode error: {}", e)))?;
-                Ok(text.to_string())
-            }
-            Some(kind) => Err(PersistenceError::RepositoryError(format!(
-                "expected blob at {}, got {:?}",
-                path_in_repo.display(),
-                kind
-            ))),
-            None => Err(PersistenceError::RepositoryError(format!(
-                "entry at {} has no object type",
-                path_in_repo.display()
-            ))),
-        }
+        let blob = repo.find_blob(entry.id()).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to read blob: {}", e))
+        })?;
+
+        let text = std::str::from_utf8(blob.content())
+            .map_err(|e| PersistenceError::DataError(format!("UTF-8 decode error: {}", e)))?;
+
+        Ok(text.to_string())
     }
 
     /// Build the ledger map by scanning the ledgers folder.
@@ -141,77 +134,77 @@ impl GitPersistence {
     /// Writes the serialized content to disk, stages it in git index, and creates a commit.
     fn persist_and_commit(
         &self,
+        repo: &Repository,
         rel_file_path: &Path,
         content: &str,
         commit_message: &str,
     ) -> Result<(), PersistenceError> {
-        // Ensure repository has a working directory
-        let workdir = self
-            .repo
-            .workdir()
-            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
+        let workdir = repo.workdir().ok_or_else(|| {
+            PersistenceError::RepositoryError("repository has no working directory".into())
+        })?;
 
         let full_fs_path = workdir.join(rel_file_path);
 
         // Write to filesystem
         fs::write(&full_fs_path, content.as_bytes()).map_err(|e| {
-            PersistenceError::DataError(format!("failed to write {}: {}", full_fs_path.display(), e))
+            PersistenceError::DataError(format!(
+                "failed to write {}: {}",
+                full_fs_path.display(),
+                e
+            ))
         })?;
 
         // Update the git index
-        let mut index = self
-            .repo
-            .index()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
+        let mut index = repo.index().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to get index: {}", e))
+        })?;
 
-        index
-            .add_path(rel_file_path)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to add path to index: {}", e)))?;
+        index.add_path(rel_file_path).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to add path to index: {}", e))
+        })?;
 
-        index
-            .write()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
+        index.write().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to write index: {}", e))
+        })?;
 
-        let tree_oid = index
-            .write_tree()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
+        let tree_oid = index.write_tree().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to write tree: {}", e))
+        })?;
 
-        let tree = self
-            .repo
-            .find_tree(tree_oid)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
+        let tree = repo.find_tree(tree_oid).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to find tree: {}", e))
+        })?;
 
         // Create signature
-        let sig = self
-            .repo
-            .signature()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
+        let sig = repo.signature().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to create signature: {}", e))
+        })?;
 
         // Determine parent commit (HEAD)
         let parent_commit = {
-            let head = self
-                .repo
-                .head()
-                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
-            let target = head
-                .target()
-                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
-            self.repo.find_commit(target).map_err(|e| {
+            let head = repo.head().map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e))
+            })?;
+            let target = head.target().ok_or_else(|| {
+                PersistenceError::RepositoryError("HEAD has no target commit".into())
+            })?;
+            repo.find_commit(target).map_err(|e| {
                 PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
             })?
         };
 
         // Commit
-        self.repo
-            .commit(
-                Some("HEAD"),
-                &sig,
-                &sig,
-                commit_message,
-                &tree,
-                &[&parent_commit],
-            )
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
+        repo.commit(
+            Some("HEAD"),
+            &sig,
+            &sig,
+            commit_message,
+            &tree,
+            &[&parent_commit],
+        )
+        .map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to create commit: {}", e))
+        })?;
 
         Ok(())
     }
@@ -221,37 +214,35 @@ impl PersistenceRepository for GitPersistence {
     // ---------------- Group Operations ----------------
 
     fn load_group(&self) -> Result<structs::Group, PersistenceError> {
-        let text = self.read_blob_text(Path::new("group.toml"))?;
-        let group: structs::Group =
-            toml::from_str(&text).map_err(|e| PersistenceError::DataError(format!("TOML parse error: {}", e)))?;
+        let repo = self.repo.lock().unwrap();
+        let text = self.read_blob_text(&repo, Path::new("group.toml"))?;
+        let group: structs::Group = toml::from_str(&text)
+            .map_err(|e| PersistenceError::DataError(format!("TOML parse error: {}", e)))?;
         Ok(group)
     }
 
     fn save_group(&self, group: &structs::Group) -> Result<(), PersistenceError> {
-        // Serialize group to TOML
-        let toml_text = toml::to_string_pretty(&group).map_err(|e| {
+        let repo = self.repo.lock().unwrap();
+
+        let toml_text = toml::to_string_pretty(group).map_err(|e| {
             PersistenceError::DataError(format!("failed to serialize group: {}", e))
         })?;
 
-        self.persist_and_commit(Path::new("group.toml"), &toml_text, "Update group configuration")
+        self.persist_and_commit(
+            &repo,
+            Path::new("group.toml"),
+            &toml_text,
+            "Update group configuration",
+        )
     }
 
     // ---------------- Ledger Operations ----------------
 
     fn list_ledgers(&self) -> Result<Vec<structs::Ledger>, PersistenceError> {
-        // Get root tree
-        let root_tree = self.get_root_tree()?;
+        let repo = self.repo.lock().unwrap();
 
-        // Find ledgers root subtree (e.g. "ledgers")
-        let ledgers_tree = match self.subtree_from_tree(&root_tree, &self.ledgers_root) {
-            Ok(t) => t,
-            Err(e) => {
-                return Err(PersistenceError::RepositoryError(format!(
-                    "failed to get ledgers subtree: {}",
-                    e
-                )));
-            }
-        };
+        let root_tree = self.get_root_tree(&repo)?;
+        let ledgers_tree = self.subtree_from_tree(&repo, &root_tree, &self.ledgers_root)?;
 
         let mut results = Vec::new();
         // Collect successful ledger id -> relative-path entries so we can update the ledger_map as we go.
@@ -269,7 +260,7 @@ impl PersistenceRepository for GitPersistence {
             match entry.kind() {
                 Some(ObjectType::Tree) => {
                     // peel to child tree
-                    let child_obj = match entry.to_object(&self.repo) {
+                    let child_obj = match entry.to_object(&repo) {
                         Ok(o) => o,
                         Err(e) => {
                             eprintln!("failed to read ledger folder {}: {}", ledger_dir_name, e);
@@ -305,7 +296,7 @@ impl PersistenceRepository for GitPersistence {
 
                     // Ensure .ledger.toml is a blob
                     let blob = match ledger_blob_entry.kind() {
-                        Some(ObjectType::Blob) => match self.repo.find_blob(ledger_blob_entry.id()) {
+                        Some(ObjectType::Blob) => match repo.find_blob(ledger_blob_entry.id()) {
                             Ok(b) => b,
                             Err(e) => {
                                 return Err(PersistenceError::RepositoryError(format!(
@@ -380,6 +371,8 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn create_ledger(&self, ledger: structs::Ledger) -> Result<Uuid, PersistenceError> {
+        let repo = self.repo.lock().unwrap();
+
         let ledger_id = ledger.id;
         // Use display_name as the folder name (sanitize if needed)
         let folder_name = &ledger.display_name;
@@ -387,10 +380,9 @@ impl PersistenceRepository for GitPersistence {
         let marker_file_path = ledger_rel_path.join(".ledger.toml");
 
         // Ensure repository has a working directory
-        let workdir = self
-            .repo
-            .workdir()
-            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
+        let workdir = repo.workdir().ok_or_else(|| {
+            PersistenceError::RepositoryError("repository has no working directory".into())
+        })?;
 
         let ledger_dir = workdir.join(&ledger_rel_path);
 
@@ -406,6 +398,7 @@ impl PersistenceRepository for GitPersistence {
 
         // Persist and commit
         self.persist_and_commit(
+            &repo,
             &marker_file_path,
             &toml_text,
             &format!("Create ledger {} ({})", ledger.display_name, ledger_id),
@@ -421,6 +414,8 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn update_ledger(&self, ledger: structs::Ledger) -> Result<(), PersistenceError> {
+        let repo = self.repo.lock().unwrap();
+
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_id = ledger.id;
         let ledger_rel_path = {
@@ -444,10 +439,17 @@ impl PersistenceRepository for GitPersistence {
             PersistenceError::DataError(format!("failed to serialize ledger {}: {}", ledger_id, e))
         })?;
 
-        self.persist_and_commit(&rel_file_path, &toml_text, &format!("Update ledger {}", ledger_id))
+        self.persist_and_commit(
+            &repo,
+            &rel_file_path,
+            &toml_text,
+            &format!("Update ledger {}", ledger_id),
+        )
     }
 
     fn delete_ledger(&self, id: Uuid) -> Result<(), PersistenceError> {
+        let repo = self.repo.lock().unwrap();
+
         // Find ledger relative path in map
         let ledger_rel_path = {
             let map = self.ledger_map.lock().unwrap();
@@ -463,10 +465,9 @@ impl PersistenceRepository for GitPersistence {
         };
 
         // Ensure repository has a working directory
-        let workdir = self
-            .repo
-            .workdir()
-            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
+        let workdir = repo.workdir().ok_or_else(|| {
+            PersistenceError::RepositoryError("repository has no working directory".into())
+        })?;
 
         let ledger_dir = workdir.join(&ledger_rel_path);
 
@@ -476,60 +477,57 @@ impl PersistenceRepository for GitPersistence {
         })?;
 
         // Update git index to remove all files in the ledger directory
-        let mut index = self
-            .repo
-            .index()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
+        let mut index = repo.index().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to get index: {}", e))
+        })?;
 
         // Remove the ledger path from index
-        index
-            .remove_dir(&ledger_rel_path, 0)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to remove from index: {}", e)))?;
+        index.remove_dir(&ledger_rel_path, 0).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to remove from index: {}", e))
+        })?;
 
-        index
-            .write()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
+        index.write().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to write index: {}", e))
+        })?;
 
-        let tree_oid = index
-            .write_tree()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
+        let tree_oid = index.write_tree().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to write tree: {}", e))
+        })?;
 
-        let tree = self
-            .repo
-            .find_tree(tree_oid)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
+        let tree = repo.find_tree(tree_oid).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to find tree: {}", e))
+        })?;
 
         // Create signature
-        let sig = self
-            .repo
-            .signature()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
+        let sig = repo.signature().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to create signature: {}", e))
+        })?;
 
         // Determine parent commit (HEAD)
         let parent_commit = {
-            let head = self
-                .repo
-                .head()
-                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
-            let target = head
-                .target()
-                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
-            self.repo.find_commit(target).map_err(|e| {
+            let head = repo.head().map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e))
+            })?;
+            let target = head.target().ok_or_else(|| {
+                PersistenceError::RepositoryError("HEAD has no target commit".into())
+            })?;
+            repo.find_commit(target).map_err(|e| {
                 PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
             })?
         };
 
         // Commit
-        self.repo
-            .commit(
-                Some("HEAD"),
-                &sig,
-                &sig,
-                &format!("Delete ledger {}", id),
-                &tree,
-                &[&parent_commit],
-            )
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
+        repo.commit(
+            Some("HEAD"),
+            &sig,
+            &sig,
+            &format!("Delete ledger {}", id),
+            &tree,
+            &[&parent_commit],
+        )
+        .map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to create commit: {}", e))
+        })?;
 
         // Remove from ledger_map
         {
@@ -546,6 +544,8 @@ impl PersistenceRepository for GitPersistence {
         &self,
         ledger_id: Uuid,
     ) -> Result<Vec<structs::Transaction>, PersistenceError> {
+        let repo = self.repo.lock().unwrap();
+
         // Find ledger relative path in map (path is relative to repo root)
         let map = self.ledger_map.lock().unwrap();
         let ledger_path = match map.get(&ledger_id) {
@@ -560,8 +560,8 @@ impl PersistenceRepository for GitPersistence {
         drop(map);
 
         // Get root tree and find the subtree for the ledger relative path
-        let root_tree = self.get_root_tree()?;
-        let ledger_tree = self.subtree_from_tree(&root_tree, &ledger_path)?;
+        let root_tree = self.get_root_tree(&repo)?;
+        let ledger_tree = self.subtree_from_tree(&repo, &root_tree, &ledger_path)?;
 
         let mut transactions = Vec::new();
 
@@ -581,11 +581,15 @@ impl PersistenceRepository for GitPersistence {
 
             match entry.kind() {
                 Some(ObjectType::Blob) => {
-                    let blob = self.repo.find_blob(entry.id()).map_err(|e| {
-                        PersistenceError::RepositoryError(format!("failed to read blob {}: {}", name, e))
+                    let blob = repo.find_blob(entry.id()).map_err(|e| {
+                        PersistenceError::RepositoryError(format!(
+                            "failed to read blob {}: {}",
+                            name, e
+                        ))
                     })?;
-                    let text = str::from_utf8(blob.content())
-                        .map_err(|e| PersistenceError::DataError(format!("UTF-8 decode error: {}", e)))?;
+                    let text = str::from_utf8(blob.content()).map_err(|e| {
+                        PersistenceError::DataError(format!("UTF-8 decode error: {}", e))
+                    })?;
                     match toml::from_str::<structs::Transaction>(text) {
                         Ok(tx) => transactions.push(tx),
                         Err(e) => eprintln!("failed to parse {}: {}", name, e),
@@ -608,6 +612,8 @@ impl PersistenceRepository for GitPersistence {
         ledger_id: Uuid,
         transaction: structs::Transaction,
     ) -> Result<Uuid, PersistenceError> {
+        let repo = self.repo.lock().unwrap();
+
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_rel_path = {
             let map = self.ledger_map.lock().unwrap();
@@ -627,10 +633,14 @@ impl PersistenceRepository for GitPersistence {
 
         // Serialize transaction to TOML
         let toml_text = toml::to_string_pretty(&transaction).map_err(|e| {
-            PersistenceError::DataError(format!("failed to serialize transaction {}: {}", transaction_id, e))
+            PersistenceError::DataError(format!(
+                "failed to serialize transaction {}: {}",
+                transaction_id, e
+            ))
         })?;
 
         self.persist_and_commit(
+            &repo,
             &rel_file_path,
             &toml_text,
             &format!("Add transaction {} to ledger {}", transaction_id, ledger_id),
@@ -644,6 +654,8 @@ impl PersistenceRepository for GitPersistence {
         ledger_id: Uuid,
         transaction: structs::Transaction,
     ) -> Result<(), PersistenceError> {
+        let repo = self.repo.lock().unwrap();
+
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_rel_path = {
             let map = self.ledger_map.lock().unwrap();
@@ -663,13 +675,20 @@ impl PersistenceRepository for GitPersistence {
 
         // Serialize transaction to TOML
         let toml_text = toml::to_string_pretty(&transaction).map_err(|e| {
-            PersistenceError::DataError(format!("failed to serialize transaction {}: {}", transaction_id, e))
+            PersistenceError::DataError(format!(
+                "failed to serialize transaction {}: {}",
+                transaction_id, e
+            ))
         })?;
 
         self.persist_and_commit(
+            &repo,
             &rel_file_path,
             &toml_text,
-            &format!("Update transaction {} in ledger {}", transaction_id, ledger_id),
+            &format!(
+                "Update transaction {} in ledger {}",
+                transaction_id, ledger_id
+            ),
         )
     }
 
@@ -678,6 +697,8 @@ impl PersistenceRepository for GitPersistence {
         ledger_id: Uuid,
         transaction_id: Uuid,
     ) -> Result<(), PersistenceError> {
+        let repo = self.repo.lock().unwrap();
+
         // Find ledger relative path in map
         let ledger_rel_path = {
             let map = self.ledger_map.lock().unwrap();
@@ -695,10 +716,9 @@ impl PersistenceRepository for GitPersistence {
         let rel_file_path = ledger_rel_path.join(format!("{}.toml", transaction_id));
 
         // Ensure repository has a working directory
-        let workdir = self
-            .repo
-            .workdir()
-            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
+        let workdir = repo.workdir().ok_or_else(|| {
+            PersistenceError::RepositoryError("repository has no working directory".into())
+        })?;
 
         let full_fs_path = workdir.join(&rel_file_path);
 
@@ -708,59 +728,59 @@ impl PersistenceRepository for GitPersistence {
         })?;
 
         // Update git index to remove the file
-        let mut index = self
-            .repo
-            .index()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
+        let mut index = repo.index().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to get index: {}", e))
+        })?;
 
-        index
-            .remove_path(&rel_file_path)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to remove from index: {}", e)))?;
+        index.remove_path(&rel_file_path).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to remove from index: {}", e))
+        })?;
 
-        index
-            .write()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
+        index.write().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to write index: {}", e))
+        })?;
 
-        let tree_oid = index
-            .write_tree()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
+        let tree_oid = index.write_tree().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to write tree: {}", e))
+        })?;
 
-        let tree = self
-            .repo
-            .find_tree(tree_oid)
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
+        let tree = repo.find_tree(tree_oid).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to find tree: {}", e))
+        })?;
 
         // Create signature
-        let sig = self
-            .repo
-            .signature()
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
+        let sig = repo.signature().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to create signature: {}", e))
+        })?;
 
         // Determine parent commit (HEAD)
         let parent_commit = {
-            let head = self
-                .repo
-                .head()
-                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
-            let target = head
-                .target()
-                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
-            self.repo.find_commit(target).map_err(|e| {
+            let head = repo.head().map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e))
+            })?;
+            let target = head.target().ok_or_else(|| {
+                PersistenceError::RepositoryError("HEAD has no target commit".into())
+            })?;
+            repo.find_commit(target).map_err(|e| {
                 PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
             })?
         };
 
         // Commit
-        self.repo
-            .commit(
-                Some("HEAD"),
-                &sig,
-                &sig,
-                &format!("Delete transaction {} from ledger {}", transaction_id, ledger_id),
-                &tree,
-                &[&parent_commit],
-            )
-            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
+        repo.commit(
+            Some("HEAD"),
+            &sig,
+            &sig,
+            &format!(
+                "Delete transaction {} from ledger {}",
+                transaction_id, ledger_id
+            ),
+            &tree,
+            &[&parent_commit],
+        )
+        .map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to create commit: {}", e))
+        })?;
 
         Ok(())
     }

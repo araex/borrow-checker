@@ -43,11 +43,13 @@ pub async fn join_group(
     // Load data from the repository
     let persistence = GitPersistence::new(Some(repo_path.clone()))
         .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
-    
-    let group = persistence.load_group()
+
+    let group = persistence
+        .load_group()
         .map_err(|e| format!("Failed to load group: {}", e))?;
-    
-    let ledgers = persistence.list_ledgers()
+
+    let ledgers = persistence
+        .list_ledgers()
         .map_err(|e| format!("Failed to load ledgers: {}", e))?;
 
     if ledgers.is_empty() {
@@ -56,8 +58,9 @@ pub async fn join_group(
 
     // Use first ledger and first entity as defaults
     let ledger_id = ledgers[0].id;
-    
-    let transactions = persistence.list_transactions(ledger_id)
+
+    let transactions = persistence
+        .list_transactions(ledger_id)
         .map_err(|e| format!("Failed to load transactions: {}", e))?;
 
     // Update config and save to disk
@@ -90,7 +93,12 @@ pub fn render_header(state: tauri::State<AppState>) -> Result<String, String> {
     // Handle case where not onboarded
     let group_ref = group.as_ref().ok_or("Not onboarded")?;
     let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
-    let user_uuid = *state.user_id.lock().map_err(|e| e.to_string())?.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = *state
+        .user_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .ok_or("Not onboarded")?;
 
     // Use first ledger's name if available, otherwise placeholder
     let ledger_name = ledgers_ref
@@ -132,7 +140,12 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
     // Handle case where not onboarded
     let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
     let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
-    let user_uuid = *state.user_id.lock().map_err(|e| e.to_string())?.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = *state
+        .user_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .ok_or("Not onboarded")?;
 
     // Get current ledger from state
     let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
@@ -188,9 +201,20 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
 }
 
 #[tauri::command]
-pub fn switch_ledger(ledger_id: String, state: tauri::State<AppState>) -> Result<String, String> {
+pub fn switch_ledger(
+    ledger_id: String,
+    state: tauri::State<AppState>,
+    persistence: tauri::State<GitPersistence>,
+) -> Result<String, String> {
     // Parse the ledger_id as UUID and find the matching ledger
     let uuid = Uuid::parse_str(&ledger_id).map_err(|e| e.to_string())?;
+
+    let mut transactions_opt = state.transactions.lock().map_err(|e| e.to_string())?;
+    *transactions_opt = Some(
+        persistence
+            .list_transactions(uuid)
+            .map_err(|e| e.to_string())?,
+    );
 
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
@@ -198,7 +222,12 @@ pub fn switch_ledger(ledger_id: String, state: tauri::State<AppState>) -> Result
     // Handle case where not onboarded
     let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
     let group_ref = group.as_ref().ok_or("Not onboarded")?;
-    let user_uuid = *state.user_id.lock().map_err(|e| e.to_string())?.as_ref().ok_or("Not onboarded")?;;
+    let user_uuid = *state
+        .user_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .ok_or("Not onboarded")?;
 
     // Find the ledger with the matching ID
     let ledger_name = ledgers_ref
@@ -243,7 +272,12 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
     let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
     let group_ref = group.as_ref().ok_or("Not onboarded")?;
     let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
-    let user_uuid = *state.user_id.lock().map_err(|e| e.to_string())?.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = *state
+        .user_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .ok_or("Not onboarded")?;
 
     // Get current ledger and user from state
     let ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
@@ -367,7 +401,12 @@ pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> 
     // Handle case where not onboarded
     let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
     let group_ref = group.as_ref().ok_or("Not onboarded")?;
-    let user_uuid = *state.user_id.lock().map_err(|e| e.to_string())?.as_ref().ok_or("Not onboarded")?;
+    let user_uuid = *state
+        .user_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .ok_or("Not onboarded")?;
 
     // Get current user's display name
     let user_name = group_ref
