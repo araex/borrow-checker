@@ -68,6 +68,7 @@ pub fn run() {
                 .level(log::LevelFilter::Debug)
                 .build(),
         )
+        .plugin(tauri_plugin_opener::init())
         .manage(GitPersistence::new(None).unwrap())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
