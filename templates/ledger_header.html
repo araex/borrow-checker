@@ -1,0 +1,60 @@
+<header class="px-6 py-6 flex justify-between items-end border-b border-zinc-700 bg-gradient-to-b from-zinc-900 to-transparent" id="ledger-header">
+  <div class="title-group">
+    <span class="font-mono text-xs text-orange-500 uppercase tracking-wide">
+      LEDGER
+    </span>
+    <div class="flex items-center gap-2">
+      <select
+        class="text-5xl font-light uppercase tracking-tight leading-tight bg-transparent text-white border-none outline-none cursor-pointer flex-shrink-0"
+        style="-webkit-appearance: none; -moz-appearance: none; appearance: none; width: fit-content;"
+        name="ledger_id"
+        hx-tauri-invoke="switch_ledger"
+        hx-target="#main-content">
+        {% for option in ledger_options %}
+        <option value="{{ option.id }}" {% if option.selected %}selected{% endif %}>
+          {{ option.name }}
+        </option>
+        {% endfor %}
+      </select>
+      <span class="pointer-events-none opacity-40 flex-shrink-0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M7 10l5 5 5-5" />
+        </svg>
+      </span>
+    </div>
+  </div>
+
+  <div class="balance text-right">
+    <span class="font-mono text-xs text-gray-500 uppercase block mb-3">
+      YOUR BALANCES
+    </span>
+    {% if balances.is_empty() %}
+    <span class="font-mono text-xl text-gray-600">
+      All settled up
+    </span>
+    {% else %}
+    <div class="space-y-2">
+      {% for balance in balance_displays %}
+      <div class="flex items-center justify-end gap-3">
+        <span class="text-sm text-gray-400">
+          {{ balance.user_name }}
+        </span>
+        {% if balance.is_negative %}
+        <span class="font-mono text-lg text-red-500">
+          -{{ currency }} {{ balance.amount_formatted }}
+        </span>
+        {% else if balance.is_positive %}
+        <span class="font-mono text-lg text-green-400">
+          {{ currency }} {{ balance.amount_formatted }}
+        </span>
+        {% else %}
+        <span class="font-mono text-lg text-gray-600">
+          {{ currency }} 0.00
+        </span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</header>

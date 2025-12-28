@@ -1,0 +1,159 @@
+<div class="flex" style="height: calc(100vh - 280px);">
+  <!-- Rotated title sidebar - sticky positioning -->
+  <div class="sticky flex flex-col items-center justify-end bg-gradient-to-b from-zinc-900 to-zinc-950 border-r border-zinc-700">
+    <h2 class="text-2xl font-bold tracking-[0.2em] uppercase whitespace-nowrap origin-center text-zinc-500"
+        style="font-family: 'Space Grotesk', sans-serif; writing-mode: vertical-rl; transform: rotate(180deg); padding: 16px 12px;">
+      {{ form_title }}
+    </h2>
+  </div>
+
+  <!-- Form content - scrollable -->
+  <div class="flex-1 px-6 py-6 overflow-y-auto">
+    <!-- Back button -->
+    <div class="mb-6">
+      <button
+        class="text-zinc-400 hover:text-orange-500 flex items-center gap-2 transition-colors"
+        hx-tauri-invoke="render_transactions"
+        hx-target="#expense-list">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+        <span>Back to Transactions</span>
+      </button>
+    </div>
+
+    <!-- Form -->
+    <form class="space-y-6">
+      <!-- Description field -->
+      <div class="form-group">
+        <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="description">
+          Description
+        </label>
+        <input
+          type="text"
+          name="description"
+          id="description"
+          value="{{ description }}"
+          required
+          class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+      </div>
+
+      <!-- Amount and Currency -->
+      <div class="grid grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="amount">
+            Amount
+          </label>
+          <input
+            type="number"
+            name="amount"
+            id="amount"
+            value="{{ amount_formatted }}"
+            step="0.01"
+            min="0"
+            required
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+        </div>
+
+        <div class="form-group">
+          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="currency">
+            Currency
+          </label>
+          <select
+            name="currency"
+            id="currency"
+            required
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+            <option value="USD" {% if currency == "USD" %}selected{% endif %}>USD</option>
+            <option value="EUR" {% if currency == "EUR" %}selected{% endif %}>EUR</option>
+            <option value="GBP" {% if currency == "GBP" %}selected{% endif %}>GBP</option>
+            <option value="CHF" {% if currency == "CHF" %}selected{% endif %}>CHF</option>
+            <option value="JPY" {% if currency == "JPY" %}selected{% endif %}>JPY</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Paid by and Date -->
+      <div class="grid grid-cols-2 gap-4">
+        <div class="form-group">
+          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="paid_by">
+            Paid By
+          </label>
+          <select
+            name="paid_by"
+            id="paid_by"
+            required
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+            {% for option in participant_options %}
+            <option value="{{ option.id }}" {% if option.selected %}selected{% endif %}>
+              {{ option.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="date">
+            Date
+          </label>
+          <input
+            type="date"
+            name="date"
+            id="date"
+            value="{{ date_only }}"
+            required
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+        </div>
+      </div>
+
+      <!-- Split ratios section -->
+      <div class="form-group">
+        <label class="block text-sm font-mono text-zinc-400 uppercase mb-3">
+          Split Between
+        </label>
+        <div class="space-y-2">
+          {% for split in participant_splits %}
+          <div class="flex items-center gap-4 bg-zinc-800 border border-zinc-700 rounded px-4 py-3">
+            <input
+              type="checkbox"
+              name="split_include_{{ split.id }}"
+              id="split_include_{{ split.id }}"
+              {% if split.is_included %}checked{% endif %}
+              class="w-4 h-4 accent-orange-500">
+
+            <label for="split_include_{{ split.id }}" class="flex-1 text-white">
+              {{ split.name }}
+            </label>
+
+            <input
+              type="text"
+              name="split_ratio_{{ split.id }}"
+              placeholder="1/1"
+              value="{{ split.ratio_value }}"
+              class="w-24 bg-zinc-900 border border-zinc-600 rounded px-3 py-1 text-white text-sm focus:border-orange-500 focus:outline-none">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex gap-4 pt-4">
+        <button
+          type="button"
+          class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold py-3 px-6 rounded transition-colors border border-zinc-700"
+          hx-tauri-invoke="render_transactions"
+          hx-target="#expense-list">
+          Cancel
+        </button>
+
+        <button
+          type="submit"
+          class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded transition-colors"
+          hx-tauri-invoke="{{ submit_invoke }}"
+          hx-target="#main-content">
+          {{ submit_label }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
