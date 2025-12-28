@@ -379,10 +379,45 @@ impl PersistenceRepository for GitPersistence {
         Ok(results)
     }
 
-    fn create_ledger(&self, _ledger: structs::Ledger) -> Result<Uuid, PersistenceError> {
-        Err(PersistenceError::UnsupportedOperation(
-            "create_ledger is not implemented for GitPersistence".into(),
-        ))
+    fn create_ledger(&self, ledger: structs::Ledger) -> Result<Uuid, PersistenceError> {
+        let ledger_id = ledger.id;
+        // Use display_name as the folder name (sanitize if needed)
+        let folder_name = &ledger.display_name;
+        let ledger_rel_path = self.ledgers_root.join(folder_name);
+        let marker_file_path = ledger_rel_path.join(".ledger.toml");
+
+        // Ensure repository has a working directory
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
+
+        let ledger_dir = workdir.join(&ledger_rel_path);
+
+        // Create the ledger directory if it doesn't exist
+        fs::create_dir_all(&ledger_dir).map_err(|e| {
+            PersistenceError::DataError(format!("failed to create ledger directory: {}", e))
+        })?;
+
+        // Serialize ledger to TOML
+        let toml_text = toml::to_string_pretty(&ledger).map_err(|e| {
+            PersistenceError::DataError(format!("failed to serialize ledger {}: {}", ledger_id, e))
+        })?;
+
+        // Persist and commit
+        self.persist_and_commit(
+            &marker_file_path,
+            &toml_text,
+            &format!("Create ledger {} ({})", ledger.display_name, ledger_id),
+        )?;
+
+        // Update the ledger_map with the new ledger
+        {
+            let mut map = self.ledger_map.lock().unwrap();
+            map.insert(ledger_id, ledger_rel_path);
+        }
+
+        Ok(ledger_id)
     }
 
     fn update_ledger(&self, ledger: structs::Ledger) -> Result<(), PersistenceError> {
