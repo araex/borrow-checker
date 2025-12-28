@@ -209,6 +209,7 @@ pub fn switch_ledger(
     // Parse the ledger_id as UUID and find the matching ledger
     let uuid = Uuid::parse_str(&ledger_id).map_err(|e| e.to_string())?;
 
+    let _ = persistence.list_ledgers();
     let mut transactions_opt = state.transactions.lock().map_err(|e| e.to_string())?;
     *transactions_opt = Some(
         persistence
