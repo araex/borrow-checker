@@ -56,13 +56,9 @@ pub struct Transaction {
     description: String,
     payer_name: String,
     total_amount: f64,
-    total_amount_formatted: String,
     currency: String,
     date: String,
-    status_label: String,
-    status_color: String,
     user_amount: f64,
-    amount_display: String,
 }
 
 impl Transaction {
@@ -72,13 +68,9 @@ impl Transaction {
             description: String::new(),
             payer_name: String::new(),
             total_amount: 0.0,
-            total_amount_formatted: String::from("0.00"),
             currency: String::from("USD"),
             date: String::new(),
-            status_label: String::new(),
-            status_color: String::new(),
             user_amount: 0.0,
-            amount_display: String::new(),
         }
     }
 
@@ -99,7 +91,6 @@ impl Transaction {
 
     pub fn total_amount(mut self, amount: f64) -> Self {
         self.total_amount = amount;
-        self.total_amount_formatted = format!("{:.2}", amount);
         self
     }
 
@@ -114,18 +105,12 @@ impl Transaction {
     }
 
     pub fn borrowed(mut self, amount: f64) -> Self {
-        self.status_label = String::from("YOU BORROWED");
-        self.status_color = String::from("text-red-500");
         self.user_amount = -amount;
-        self.amount_display = format!("-{} {:.2}", self.currency, amount.abs());
         self
     }
 
     pub fn lent(mut self, amount: f64) -> Self {
-        self.status_label = String::from("YOU LENT");
-        self.status_color = String::from("text-green-400");
         self.user_amount = amount;
-        self.amount_display = format!("{} {:.2}", self.currency, amount);
         self
     }
 
@@ -145,27 +130,9 @@ impl Default for Transaction {
 #[template(path = "ledger_header.html")]
 pub struct LedgerHeader {
     ledger_name: String,
-    balances: Vec<(String, f64)>,          // (user_name, amount) pairs
-    balance_displays: Vec<BalanceDisplay>, // precomputed display data
+    balances: Vec<(String, f64)>, // (user_name, amount) pairs
     currency: String,
-    ledgers: Vec<(String, String)>,    // (id, name) pairs
-    ledger_options: Vec<LedgerOption>, // precomputed options with selected state
-}
-
-#[derive(Debug)]
-pub struct BalanceDisplay {
-    pub user_name: String,
-    pub amount: f64,
-    pub amount_formatted: String,
-    pub is_negative: bool,
-    pub is_positive: bool,
-}
-
-#[derive(Debug)]
-pub struct LedgerOption {
-    pub id: String,
-    pub name: String,
-    pub selected: bool,
+    ledgers: Vec<(String, String)>, // (id, name) pairs
 }
 
 impl LedgerHeader {
@@ -173,10 +140,8 @@ impl LedgerHeader {
         Self {
             ledger_name: String::new(),
             balances: Vec::new(),
-            balance_displays: Vec::new(),
             currency: String::from("USD"),
             ledgers: Vec::new(),
-            ledger_options: Vec::new(),
         }
     }
 
@@ -186,18 +151,6 @@ impl LedgerHeader {
     }
 
     pub fn balances(mut self, balances: Vec<(String, f64)>) -> Self {
-        // Precompute balance display data
-        self.balance_displays = balances
-            .iter()
-            .map(|(user_name, amount)| BalanceDisplay {
-                user_name: user_name.clone(),
-                amount: *amount,
-                amount_formatted: format!("{:.2}", amount.abs()),
-                is_negative: *amount < 0.0,
-                is_positive: *amount > 0.0,
-            })
-            .collect();
-
         self.balances = balances;
         self
     }
@@ -208,16 +161,6 @@ impl LedgerHeader {
     }
 
     pub fn ledgers(mut self, ledgers: Vec<(String, String)>) -> Self {
-        // Precompute ledger options with selected state
-        self.ledger_options = ledgers
-            .iter()
-            .map(|(id, name)| LedgerOption {
-                id: id.clone(),
-                name: name.clone(),
-                selected: name == &self.ledger_name,
-            })
-            .collect();
-
         self.ledgers = ledgers;
         self
     }
@@ -241,32 +184,13 @@ pub struct ExpenseForm {
     description: String,
     paid_by: String,
     amount: f64,
-    amount_formatted: String,
     currency: String,
     date: String,
-    date_only: String,
     split_ratios: Vec<Split>,
     participants: Vec<(String, String)>, // (id, display_name) pairs
-    participant_splits: Vec<ParticipantSplit>, // precomputed split data
-    participant_options: Vec<ParticipantOption>, // precomputed participant options
     form_title: String,
     submit_label: String,
     submit_invoke: String,
-}
-
-#[derive(Debug)]
-pub struct ParticipantSplit {
-    pub id: String,
-    pub name: String,
-    pub is_included: bool,
-    pub ratio_value: String,
-}
-
-#[derive(Debug)]
-pub struct ParticipantOption {
-    pub id: String,
-    pub name: String,
-    pub selected: bool,
 }
 
 impl ExpenseForm {
@@ -276,14 +200,10 @@ impl ExpenseForm {
             description: String::new(),
             paid_by: String::new(),
             amount: 0.0,
-            amount_formatted: String::from("0.00"),
             currency: String::from("USD"),
             date: String::new(),
-            date_only: String::new(),
             split_ratios: Vec::new(),
             participants: Vec::new(),
-            participant_splits: Vec::new(),
-            participant_options: Vec::new(),
             form_title: String::from("Add Expense"),
             submit_label: String::from("Create Expense"),
             submit_invoke: String::from("create_expense"),
@@ -310,7 +230,6 @@ impl ExpenseForm {
 
     pub fn amount(mut self, amount: f64) -> Self {
         self.amount = amount;
-        self.amount_formatted = format!("{:.2}", amount);
         self
     }
 
@@ -320,9 +239,7 @@ impl ExpenseForm {
     }
 
     pub fn date(mut self, date: impl Into<String>) -> Self {
-        let date_str = date.into();
-        self.date_only = date_str.split('T').next().unwrap_or(&date_str).to_string();
-        self.date = date_str;
+        self.date = date.into();
         self
     }
 
@@ -332,38 +249,6 @@ impl ExpenseForm {
     }
 
     pub fn participants(mut self, participants: Vec<(String, String)>) -> Self {
-        // Precompute participant split data
-        self.participant_splits = participants
-            .iter()
-            .map(|(id, name)| {
-                let split = self
-                    .split_ratios
-                    .iter()
-                    .find(|s| s.entity_id.to_string() == *id);
-                let ratio_value = split
-                    .map(|s| format!("{}/{}", s.ratio.numerator(), s.ratio.denominator()))
-                    .unwrap_or_else(|| "0/1".to_string());
-                let is_included = split.is_some();
-
-                ParticipantSplit {
-                    id: id.clone(),
-                    name: name.clone(),
-                    is_included,
-                    ratio_value,
-                }
-            })
-            .collect();
-
-        // Precompute participant options with selected state
-        self.participant_options = participants
-            .iter()
-            .map(|(id, name)| ParticipantOption {
-                id: id.clone(),
-                name: name.clone(),
-                selected: id == &self.paid_by,
-            })
-            .collect();
-
         self.participants = participants;
         self
     }

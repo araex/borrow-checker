@@ -10,9 +10,9 @@
         name="ledger_id"
         hx-tauri-invoke="switch_ledger"
         hx-target="#main-content">
-        {% for option in ledger_options %}
-        <option value="{{ option.id }}" {% if option.selected %}selected{% endif %}>
-          {{ option.name }}
+        {% for (id, name) in ledgers %}
+        <option value="{{ id }}" {% if *name == *ledger_name %}selected{% endif %}>
+          {{ name }}
         </option>
         {% endfor %}
       </select>
@@ -34,18 +34,18 @@
     </span>
     {% else %}
     <div class="space-y-2">
-      {% for balance in balance_displays %}
+      {% for (user_name, amount) in balances %}
       <div class="flex items-center justify-end gap-3">
         <span class="text-sm text-gray-400">
-          {{ balance.user_name }}
+          {{ user_name }}
         </span>
-        {% if balance.is_negative %}
+        {% if *amount < 0.0 %}
         <span class="font-mono text-lg text-red-500">
-          -{{ currency }} {{ balance.amount_formatted }}
+          -{{ currency }} {{ (-*amount) | fmt("{:.2}") }}
         </span>
-        {% else if balance.is_positive %}
+        {% else if *amount > 0.0 %}
         <span class="font-mono text-lg text-green-400">
-          {{ currency }} {{ balance.amount_formatted }}
+          {{ currency }} {{ *amount | fmt("{:.2}") }}
         </span>
         {% else %}
         <span class="font-mono text-lg text-gray-600">

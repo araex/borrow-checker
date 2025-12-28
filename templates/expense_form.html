@@ -48,7 +48,7 @@
             type="number"
             name="amount"
             id="amount"
-            value="{{ amount_formatted }}"
+            value="{{ amount | fmt("{:.2}") }}"
             step="0.01"
             min="0"
             required
@@ -84,9 +84,9 @@
             id="paid_by"
             required
             class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
-            {% for option in participant_options %}
-            <option value="{{ option.id }}" {% if option.selected %}selected{% endif %}>
-              {{ option.name }}
+            {% for (id, name) in participants %}
+            <option value="{{ id }}" {% if *id == *paid_by %}selected{% endif %}>
+              {{ name }}
             </option>
             {% endfor %}
           </select>
@@ -100,7 +100,7 @@
             type="date"
             name="date"
             id="date"
-            value="{{ date_only }}"
+            value="{% if date.contains('T') %}{{ date.split_once('T').unwrap().0 }}{% else %}{{ date }}{% endif %}"
             required
             class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
         </div>
@@ -112,24 +112,24 @@
           Split Between
         </label>
         <div class="space-y-2">
-          {% for split in participant_splits %}
+          {% for (id, name) in participants %}
           <div class="flex items-center gap-4 bg-zinc-800 border border-zinc-700 rounded px-4 py-3">
             <input
               type="checkbox"
-              name="split_include_{{ split.id }}"
-              id="split_include_{{ split.id }}"
-              {% if split.is_included %}checked{% endif %}
+              name="split_include_{{ id }}"
+              id="split_include_{{ id }}"
+              {% for split in split_ratios %}{% if split.entity_id.to_string() == *id %}checked{% endif %}{% endfor %}
               class="w-4 h-4 accent-orange-500">
 
-            <label for="split_include_{{ split.id }}" class="flex-1 text-white">
-              {{ split.name }}
+            <label for="split_include_{{ id }}" class="flex-1 text-white">
+              {{ name }}
             </label>
 
             <input
               type="text"
-              name="split_ratio_{{ split.id }}"
+              name="split_ratio_{{ id }}"
               placeholder="1/1"
-              value="{{ split.ratio_value }}"
+              value="{% for split in split_ratios %}{% if split.entity_id.to_string() == *id %}{{ split.ratio.numerator() }}/{{ split.ratio.denominator() }}{% endif %}{% endfor %}"
               class="w-24 bg-zinc-900 border border-zinc-600 rounded px-3 py-1 text-white text-sm focus:border-orange-500 focus:outline-none">
           </div>
           {% endfor %}
