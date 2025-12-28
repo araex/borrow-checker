@@ -147,11 +147,84 @@ impl PersistenceRepository for GitPersistence {
         Ok(group)
     }
 
-    fn save_group(&self, _group: &structs::Group) -> Result<(), PersistenceError> {
-        // For a git-backed read-only implementation in the testdata tree we don't support writes yet.
-        Err(PersistenceError::UnsupportedOperation(
-            "save_group is not implemented for GitPersistence".into(),
-        ))
+    fn save_group(&self, group: &structs::Group) -> Result<(), PersistenceError> {
+        // Path to group.toml in the repo root
+        let rel_file_path = Path::new("group.toml");
+
+        // Ensure repository has a working directory
+        let workdir = self
+            .repo
+            .workdir()
+            .ok_or_else(|| PersistenceError::RepositoryError("repository has no working directory".into()))?;
+
+        let full_fs_path = workdir.join(rel_file_path);
+
+        // Serialize group to TOML
+        let toml_text = toml::to_string_pretty(&group).map_err(|e| {
+            PersistenceError::DataError(format!("failed to serialize group: {}", e))
+        })?;
+
+        // Write to filesystem
+        fs::write(&full_fs_path, toml_text.as_bytes()).map_err(|e| {
+            PersistenceError::DataError(format!("failed to write {}: {}", full_fs_path.display(), e))
+        })?;
+
+        // Update the git index
+        let mut index = self
+            .repo
+            .index()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to get index: {}", e)))?;
+
+        index
+            .add_path(rel_file_path)
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to add path to index: {}", e)))?;
+
+        index
+            .write()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write index: {}", e)))?;
+
+        let tree_oid = index
+            .write_tree()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to write tree: {}", e)))?;
+
+        let tree = self
+            .repo
+            .find_tree(tree_oid)
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to find tree: {}", e)))?;
+
+        // Create signature
+        let sig = self
+            .repo
+            .signature()
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create signature: {}", e)))?;
+
+        // Determine parent commit (HEAD)
+        let parent_commit = {
+            let head = self
+                .repo
+                .head()
+                .map_err(|e| PersistenceError::RepositoryError(format!("failed to get HEAD: {}", e)))?;
+            let target = head
+                .target()
+                .ok_or_else(|| PersistenceError::RepositoryError("HEAD has no target commit".into()))?;
+            self.repo.find_commit(target).map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to find parent commit: {}", e))
+            })?
+        };
+
+        // Commit
+        self.repo
+            .commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                "Update group configuration",
+                &tree,
+                &[&parent_commit],
+            )
+            .map_err(|e| PersistenceError::RepositoryError(format!("failed to create commit: {}", e)))?;
+
+        Ok(())
     }
 
     // ---------------- Ledger Operations ----------------
