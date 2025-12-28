@@ -217,6 +217,12 @@ pub fn switch_ledger(
             .map_err(|e| e.to_string())?,
     );
 
+    let mut guard = state
+        .current_ledger_id
+        .lock()
+        .map_err(|e| format!("mutex poisoned: {e}"))?;
+    *guard = Some(uuid);
+
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
 
