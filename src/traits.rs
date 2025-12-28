@@ -24,9 +24,6 @@ pub enum PersistenceError {
 
     /// Requested object not found (e.g. ledger id not found)
     NotFound(String),
-
-    /// Operation is not supported by this persistence implementation
-    UnsupportedOperation(String),
 }
 
 impl fmt::Display for PersistenceError {
@@ -41,7 +38,6 @@ impl fmt::Display for PersistenceError {
                 write!(f, "Failed to parse ledger '{}': {}", ledger_name, message)
             }
             PersistenceError::NotFound(s) => write!(f, "Not found: {}", s),
-            PersistenceError::UnsupportedOperation(s) => write!(f, "Unsupported operation: {}", s),
         }
     }
 }
