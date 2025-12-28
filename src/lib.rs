@@ -6,6 +6,7 @@ use crate::traits::PersistenceRepository;
 mod accounting;
 mod commands;
 mod components;
+mod config;
 mod git_adapter;
 mod ssh_keys;
 mod structs;
@@ -14,7 +15,12 @@ mod validator;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Ensure SSH keys exist
     ssh_keys::ensure_ssh_keys().expect("Failed to ensure SSH keys");
+
+    // Ensure config exists (with hardcoded defaults for now)
+    let config = config::ensure_config().expect("Failed to ensure config");
+    log::info!("Using group remote URL: {}", config.group_remote_url);
 
     let persistence = GitPersistence::new(None).unwrap();
     let group = persistence.load_group().unwrap();
@@ -31,6 +37,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(structs::AppState {
+            config: std::sync::Mutex::new(config),
             group: std::sync::Mutex::new(group),
             ledgers: std::sync::Mutex::new(ledgers),
             transactions: std::sync::Mutex::new(transactions),

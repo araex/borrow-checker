@@ -275,6 +275,7 @@ pub struct Settings {
     current_ledger: String,
     ssh_private_key_path: String,
     ssh_public_key: String,
+    group_remote_url: String,
 }
 
 impl Settings {
@@ -287,6 +288,7 @@ impl Settings {
             current_ledger: String::new(),
             ssh_private_key_path: String::new(),
             ssh_public_key: String::new(),
+            group_remote_url: String::new(),
         }
     }
 
@@ -322,6 +324,11 @@ impl Settings {
 
     pub fn ssh_public_key(mut self, key: impl Into<String>) -> Self {
         self.ssh_public_key = key.into();
+        self
+    }
+
+    pub fn group_remote_url(mut self, url: impl Into<String>) -> Self {
+        self.group_remote_url = url.into();
         self
     }
 

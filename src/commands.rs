@@ -258,6 +258,7 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
 pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> {
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
+    let config = state.config.lock().map_err(|e| e.to_string())?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
     let user_uuid = state.user_id;
 
@@ -306,6 +307,7 @@ pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> 
         .current_ledger(current_ledger)
         .ssh_private_key_path(ssh_private_key_path)
         .ssh_public_key(ssh_public_key)
+        .group_remote_url(config.group_remote_url.clone())
         .build();
 
     Ok(settings)

@@ -8,10 +8,7 @@ use std::path::PathBuf;
 
 /// Get the path to the SSH key directory for this application
 fn get_ssh_key_dir() -> io::Result<PathBuf> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Config directory not found"))?;
-
-    let app_config_dir = config_dir.join("borrow-checker");
+    let app_config_dir = crate::config::get_config_dir()?;
     let ssh_dir = app_config_dir.join("ssh");
 
     // Create the directory if it doesn't exist

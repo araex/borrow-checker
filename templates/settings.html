@@ -41,13 +41,27 @@
 
         <!-- Group Settings Section -->
         <div class="bg-zinc-900 rounded-lg p-6 border border-zinc-700">
-            <h3 class="text-lg font-semibold text-zinc-300 mb-4">Group Members</h3>
-            <div class="space-y-3">
-                {% for member in group_members %}
-                <div class="flex items-center justify-between bg-zinc-800 rounded px-4 py-3 border border-zinc-700">
-                    <span class="text-zinc-200">{{ member }}</span>
+            <h3 class="text-lg font-semibold text-zinc-300 mb-4">Group Configuration</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-zinc-400 mb-2">Group Repository URL</label>
+                    <input
+                        type="text"
+                        value="{{ group_remote_url }}"
+                        class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 font-mono text-sm focus:outline-none focus:border-orange-500"
+                        readonly
+                    />
                 </div>
-                {% endfor %}
+                <div>
+                    <h4 class="text-md font-semibold text-zinc-400 mb-3">Group Members</h4>
+                    <div class="space-y-3">
+                        {% for member in group_members %}
+                        <div class="flex items-center justify-between bg-zinc-800 rounded px-4 py-3 border border-zinc-700">
+                            <span class="text-zinc-200">{{ member }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
 

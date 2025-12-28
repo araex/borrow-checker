@@ -1,3 +1,4 @@
+use crate::config::AppConfig;
 use rational::Rational;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -5,6 +6,7 @@ use toml::value::Datetime;
 use uuid::Uuid;
 
 pub struct AppState {
+    pub config: Mutex<AppConfig>,
     pub group: Mutex<Group>,
     pub ledgers: Mutex<Vec<Ledger>>,
     pub transactions: Mutex<Vec<Transaction>>,
