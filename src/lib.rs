@@ -45,7 +45,7 @@ pub fn run() {
             ledgers: std::sync::Mutex::new(Some(ledgers)),
             transactions: std::sync::Mutex::new(Some(transactions)),
             current_ledger_id: std::sync::Mutex::new(Some(ledger_id)),
-            user_id: Some(user_id),
+            user_id: std::sync::Mutex::new(Some(user_id)),
         }
     } else {
         eprintln!("[INFO] User not onboarded, starting with empty state");
@@ -56,7 +56,7 @@ pub fn run() {
             ledgers: std::sync::Mutex::new(None),
             transactions: std::sync::Mutex::new(None),
             current_ledger_id: std::sync::Mutex::new(None),
-            user_id: None,
+            user_id: std::sync::Mutex::new(None),
         }
     };
 

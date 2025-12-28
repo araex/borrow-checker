@@ -11,7 +11,7 @@ pub struct AppState {
     pub ledgers: Mutex<Option<Vec<Ledger>>>,
     pub transactions: Mutex<Option<Vec<Transaction>>>,
     pub current_ledger_id: Mutex<Option<Uuid>>,
-    pub user_id: Option<Uuid>,
+    pub user_id: Mutex<Option<Uuid>>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
