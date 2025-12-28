@@ -5,6 +5,7 @@ edition = "2024"
 
 [lib]
 name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.5.3", features = [] }
@@ -23,6 +24,7 @@ tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 toml = "0.9"
 uuid = { version = "1", features = ["serde", "v4"] }
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [dev-dependencies]
 test-context = "0.5"
