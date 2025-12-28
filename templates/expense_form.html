@@ -10,7 +10,7 @@
   <!-- Form content - scrollable -->
   <div class="flex-1 px-6 py-6 overflow-y-auto">
     <!-- Back button -->
-    <div class="mb-6">
+    <div class="">
       <button
         class="text-zinc-400 hover:text-orange-500 flex items-center gap-2 transition-colors"
         hx-tauri-invoke="render_transactions"
@@ -26,7 +26,7 @@
     <form class="space-y-6">
       <!-- Description field -->
       <div class="form-group">
-        <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="description">
+        <label class="block text-sm font-mono text-zinc-400 uppercase" for="description">
           Description
         </label>
         <input
@@ -35,13 +35,13 @@
           id="description"
           value="{{ description }}"
           required
-          class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+          class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-white focus:border-orange-500 focus:outline-none transition-colors">
       </div>
 
       <!-- Amount and Currency -->
       <div class="grid grid-cols-2 gap-4">
         <div class="form-group">
-          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="amount">
+          <label class="block text-sm font-mono text-zinc-400 uppercase" for="amount">
             Amount
           </label>
           <input
@@ -52,18 +52,18 @@
             step="0.01"
             min="0"
             required
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-white focus:border-orange-500 focus:outline-none transition-colors">
         </div>
 
         <div class="form-group">
-          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="currency">
+          <label class="block text-sm font-mono text-zinc-400 uppercase" for="currency">
             Currency
           </label>
           <select
             name="currency"
             id="currency"
             required
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2.5 text-white focus:border-orange-500 focus:outline-none transition-colors">
             <option value="USD" {% if currency == "USD" %}selected{% endif %}>USD</option>
             <option value="EUR" {% if currency == "EUR" %}selected{% endif %}>EUR</option>
             <option value="GBP" {% if currency == "GBP" %}selected{% endif %}>GBP</option>
@@ -76,14 +76,14 @@
       <!-- Paid by and Date -->
       <div class="grid grid-cols-2 gap-4">
         <div class="form-group">
-          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="paid_by">
+          <label class="block text-sm font-mono text-zinc-400 uppercase" for="paid_by">
             Paid By
           </label>
           <select
             name="paid_by"
             id="paid_by"
             required
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2.5 text-white focus:border-orange-500 focus:outline-none transition-colors">
             {% for (id, name) in participants %}
             <option value="{{ id }}" {% if *id == *paid_by %}selected{% endif %}>
               {{ name }}
@@ -93,7 +93,7 @@
         </div>
 
         <div class="form-group">
-          <label class="block text-sm font-mono text-zinc-400 uppercase mb-2" for="date">
+          <label class="block text-sm font-mono text-zinc-400 uppercase" for="date">
             Date
           </label>
           <input
@@ -102,18 +102,18 @@
             id="date"
             value="{% if date.contains('T') %}{{ date.split_once('T').unwrap().0 }}{% else %}{{ date }}{% endif %}"
             required
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-3 text-white focus:border-orange-500 focus:outline-none transition-colors">
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2.5 text-white focus:border-orange-500 focus:outline-none transition-colors">
         </div>
       </div>
 
       <!-- Split ratios section -->
       <div class="form-group">
-        <label class="block text-sm font-mono text-zinc-400 uppercase mb-3">
+        <label class="block text-sm font-mono text-zinc-400 uppercase">
           Split Between
         </label>
         <div class="space-y-2">
           {% for (id, name) in participants %}
-          <div class="flex items-center gap-4 bg-zinc-800 border border-zinc-700 rounded px-4 py-3">
+          <div class="flex items-center gap-4 bg-zinc-800 border border-zinc-700 rounded px-4 py-2.5">
             <input
               type="checkbox"
               name="split_include_{{ id }}"
@@ -137,10 +137,10 @@
       </div>
 
       <!-- Action buttons -->
-      <div class="flex gap-4 pt-4">
+      <div class="flex gap-4">
         <button
           type="button"
-          class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold py-3 px-6 rounded transition-colors border border-zinc-700"
+          class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold py-2.5 px-6 rounded transition-colors border border-zinc-700"
           hx-tauri-invoke="render_transactions"
           hx-target="#expense-list">
           Cancel
@@ -148,7 +148,7 @@
 
         <button
           type="submit"
-          class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded transition-colors"
+          class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2.5 px-6 rounded transition-colors"
           hx-tauri-invoke="{{ submit_invoke }}"
           hx-target="#main-content">
           {{ submit_label }}
