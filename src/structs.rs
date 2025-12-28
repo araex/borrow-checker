@@ -23,7 +23,7 @@ pub struct Entity {
     pub display_name: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Ledger {
     pub id: Uuid,
     pub display_name: String,
@@ -36,7 +36,7 @@ pub struct LedgerWithTransactions {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Transaction {
     pub id: Uuid,
     pub description: String,
@@ -47,7 +47,7 @@ pub struct Transaction {
     pub split_ratios: Vec<Split>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Split {
     pub entity_id: Uuid,
     pub ratio: Rational,
