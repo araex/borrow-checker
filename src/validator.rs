@@ -282,7 +282,7 @@ pub fn validate_transaction(
         }
 
         // Check that ratio is positive
-        if split.ratio <= rational::Rational::zero() {
+        if split.ratio.is_some() && split.ratio.expect("How?!") <= rational::Rational::zero() {
             errors.push(ValidationError {
                 field: format!("split_ratios[{}].ratio", idx),
                 message: "Split ratio must be positive".to_string(),
@@ -367,7 +367,7 @@ pub fn validate_split_ratios_sum(ratios: &[Split]) -> Result<(), ValidationError
         });
     }
 
-    let sum: rational::Rational = ratios.iter().map(|s| s.ratio).sum();
+    let sum: rational::Rational = ratios.iter().map(|s| s.ratio.expect("Expected ratio to be set")).sum();
     let one = rational::Rational::one();
     
     // Define tolerance as 1/1000
@@ -397,8 +397,32 @@ pub fn validate_split_ratios_sum(ratios: &[Split]) -> Result<(), ValidationError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::structs::Entity;
+    use crate::structs::{Entity, SplitType};
+    use test_context::{TestContext, test_context};
     use toml::value::Datetime;
+
+    struct TestSplits {
+        splits: Vec<Split>
+    }
+
+    impl TestContext for TestSplits {
+        fn setup() -> Self {
+                    let splits = vec![
+            Split {
+                entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+                ratio: Some(rational::Rational::new(1, 2)),
+                amount: None,
+            },
+            Split {
+                entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
+                ratio: Some(rational::Rational::new(1, 2)),
+                amount: None,
+            },
+        ];
+
+        TestSplits { splits }
+        }
+    }
 
     fn create_test_group() -> Group {
         Group {
@@ -505,11 +529,13 @@ mod tests {
         let splits = vec![
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-                ratio: rational::Rational::new(1, 2),
+                ratio: Some(rational::Rational::new(1, 2)),
+                amount: None
             },
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
-                ratio: rational::Rational::new(1, 2),
+                ratio: Some(rational::Rational::new(1, 2)),
+                amount: None
             },
         ];
         assert!(validate_split_ratios_sum(&splits).is_ok());
@@ -520,18 +546,21 @@ mod tests {
         let splits = vec![
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-                ratio: rational::Rational::new(1, 3),
+                ratio: Some(rational::Rational::new(1, 3)),
+                amount:None
             },
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
-                ratio: rational::Rational::new(1, 3),
+                ratio: Some(rational::Rational::new(1, 3)),
+                amount:None
             },
         ];
         assert!(validate_split_ratios_sum(&splits).is_err());
     }
 
+    #[test_context(TestSplits)]
     #[test]
-    fn test_validate_transaction_success() {
+    fn test_validate_transaction_success(sut: &mut TestSplits) {
         let group = create_test_group();
         let ledger = create_test_ledger();
         
@@ -546,16 +575,8 @@ mod tests {
                 time: None,
                 offset: None,
             },
-            split_ratios: vec![
-                Split {
-                    entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-                    ratio: rational::Rational::new(1, 2),
-                },
-                Split {
-                    entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
-                    ratio: rational::Rational::new(1, 2),
-                },
-            ],
+            split_ratios: sut.splits.clone(),
+            split_type: SplitType::Ratio
         };
 
         let result = validate_transaction(&transaction, &ledger, &group);
@@ -582,9 +603,11 @@ mod tests {
             split_ratios: vec![
                 Split {
                     entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-                    ratio: rational::Rational::new(1, 1),
+                    ratio: Some(rational::Rational::new(1, 1)),
+                    amount: None
                 },
             ],
+            split_type: SplitType::Ratio
         };
 
         let result = validate_transaction(&transaction, &ledger, &group);

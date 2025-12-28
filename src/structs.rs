@@ -47,12 +47,55 @@ pub struct Transaction {
     pub amount: f64,
     pub transaction_datetime_rfc_3339: Datetime,
     pub split_ratios: Vec<Split>,
+    #[serde(default)]
+    pub split_type: SplitType,
+}
+
+/// Defines how the transaction is split among entities
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub enum SplitType {
+    /// Each entity pays a set ratio of the total amount
+    /// Use as the default type if not type was serialised
+    #[default]
+    Ratio,
+    /// Each entity pays the amount specified in the split
+    Amount,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Split {
     pub entity_id: Uuid,
-    pub ratio: Rational,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ratio: Option<Rational>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<f64>
+}
+
+impl Split {
+    /// Returns the amount a user ows for the given transaction.
+    /// Uses ratio + transaction amount or fixed amount.
+    pub fn user_share(&self, transaction: &Transaction) -> f64 {
+        if let Some(r) = self.ratio {
+            let ratio = r.decimal_value();
+            transaction.amount * ratio
+        } else if let Some(a) = self.amount {
+            a
+        } else {
+            panic!("Split with no ratio or amount");
+        }
+    }
+
+    /// Returns the fraction the user ows of the total amount.
+    /// Uses transaction amount and split amount or split ratio.
+    pub fn user_ratio(&self, transaction: &Transaction) -> Rational{
+        if let Some(r) = self.ratio {
+            r
+        } else if let Some(a) = self.amount {
+            Rational::new((a * 1_000_000.0) as i64, (transaction.amount * 1_000_000.0) as i64)
+        } else {
+            panic!("Split with no ratio or amount");
+        } 
+    }
 }
 
 #[cfg(test)]
@@ -142,5 +185,20 @@ mod tests {
             group.entities[2].id.to_string(),
             "92c0a0fc-aa86-4922-ab1f-7b9326720177"
         );
+    }
+
+    #[test]
+    fn test_amount_from_split_ratio() {
+        let sut = Split {entity_id: Uuid::new_v4(),ratio: Some(Rational::new(500,1000)), amount: None};
+
+        assert_eq!(sut.user_share(&Transaction { id: Uuid::new_v4(), description: "".to_string(), paid_by_entity: Uuid::new_v4(), currency_iso_4217: "".to_string(), amount: 100.0, split_type: SplitType::Ratio, transaction_datetime_rfc_3339: Datetime {
+                date: Some(toml::value::Date {
+                    year: 2025,
+                    month: 1,
+                    day: 1,
+                }),
+                time: None,
+                offset: None,
+            }, split_ratios: Vec::new() }), 50.0)
     }
 }

@@ -423,7 +423,8 @@ pub fn show_add_expense_form(state: tauri::State<AppState>) -> Result<String, St
         .iter()
         .map(|e| Split {
             entity_id: e.id,
-            ratio: Rational::new(1, num_participants),
+            ratio: Some(Rational::new(1, num_participants)),
+            amount: None
         })
         .collect();
 

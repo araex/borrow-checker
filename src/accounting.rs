@@ -1,5 +1,6 @@
 use crate::structs::{Split, Transaction};
 use std::collections::HashMap;
+use log::warn;
 use uuid::Uuid;
 
 /// Calculate who owes whom from a user's perspective
@@ -24,8 +25,8 @@ pub fn calculate_balances(
         // Calculate shares for each participant
         for split in &transaction.split_ratios {
             let entity_id = split.entity_id;
-            let ratio = split.ratio.decimal_value();
-            let share = amount * ratio;
+
+            let share = split.user_share(transaction);
 
             if entity_id == user_id {
                 // User's own share
@@ -53,8 +54,7 @@ pub fn calculate_balances(
 pub fn get_user_share(transaction: &Transaction, user_id: Uuid) -> f64 {
     for split in &transaction.split_ratios {
         if split.entity_id == user_id {
-            let ratio = split.ratio.decimal_value();
-            return transaction.amount * ratio;
+            return split.user_share(transaction);
         }
     }
     0.0
@@ -70,33 +70,10 @@ pub fn get_primary_currency(transactions: &[Transaction]) -> String {
         .unwrap_or_else(|| String::from("USD"))
 }
 
-/// Normalize split ratios to sum to 1
-///
-/// Algorithm: Calculate total ratio, divide each by total
-pub fn normalize_split_ratios(ratios: Vec<Split>) -> Vec<Split> {
-    // Calculate total ratio
-    let total: f64 = ratios.iter().map(|split| split.ratio.decimal_value()).sum();
-
-    if total == 0.0 {
-        return ratios;
-    }
-
-    // Normalize each ratio
-    ratios
-        .into_iter()
-        .map(|split| {
-            let current_ratio = split.ratio.decimal_value();
-            let normalized = current_ratio / total;
-            Split {
-                entity_id: split.entity_id,
-                ratio: rational::Rational::new((normalized * 1_000_000.0) as i64, 1_000_000),
-            }
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::structs::SplitType;
+
     use super::*;
     use rational::Rational;
 
@@ -126,9 +103,11 @@ mod tests {
                 .into_iter()
                 .map(|(id, numer, denom)| Split {
                     entity_id: id,
-                    ratio: Rational::new(numer, denom),
+                    ratio: Some(Rational::new(numer, denom)),
+                    amount: None
                 })
                 .collect(),
+            split_type: SplitType::Ratio,
         }
     }
 
@@ -173,28 +152,5 @@ mod tests {
         // Friend owes user 50
         assert_eq!(balances.len(), 1);
         assert!((balances[&friend_id] - 50.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_normalize_split_ratios() {
-        let entity1 = Uuid::new_v4();
-        let entity2 = Uuid::new_v4();
-
-        let splits = vec![
-            Split {
-                entity_id: entity1,
-                ratio: Rational::new(2, 1),
-            },
-            Split {
-                entity_id: entity2,
-                ratio: Rational::new(1, 1),
-            },
-        ];
-
-        let normalized = normalize_split_ratios(splits);
-
-        let total: f64 = normalized.iter().map(|s| s.ratio.decimal_value()).sum();
-
-        assert!((total - 1.0).abs() < 0.01);
     }
 }

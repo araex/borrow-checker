@@ -131,7 +131,7 @@
             name="split_ratio_{{ id }}"
             id="split_ratio_{{ id }}"
             placeholder="1/1"
-            value="{% for split in split_ratios %}{% if split.entity_id.to_string() == *id %}{{ split.ratio.numerator() }}/{{ split.ratio.denominator() }}{% endif %}{% endfor %}"
+            value="{% for split in split_ratios %}{% if split.entity_id.to_string() == *id %}{{ split.ratio.unwrap().numerator() }}/{{ split.ratio.unwrap().denominator() }}{% endif %}{% endfor %}"
             class="w-24 bg-zinc-900 border border-zinc-600 rounded px-3 py-1 text-zinc-200 text-sm focus:border-orange-500 focus:outline-none">
         </div>
         {% endfor %}
