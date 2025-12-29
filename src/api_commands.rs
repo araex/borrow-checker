@@ -2,7 +2,7 @@ use crate::api_types::*;
 use crate::config::save_config;
 use crate::git_adapter::GitPersistence;
 use crate::repo_manager::RepoManager;
-use crate::structs::AppState;
+use crate::structs::{AppState, SplitType};
 use crate::traits::PersistenceRepository;
 use tauri::Manager;
 use uuid::Uuid;
@@ -398,6 +398,7 @@ pub fn create_expense(
             Ok(crate::structs::Split {
                 entity_id,
                 ratio: Rational::new(input.numerator, input.denominator),
+                split_type: SplitType::Ratio(Rational::new(input.numerator, input.denominator))
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -464,6 +465,7 @@ pub fn update_expense(
             Ok(crate::structs::Split {
                 entity_id,
                 ratio: Rational::new(input.numerator, input.denominator),
+                split_type: SplitType::Ratio(Rational::new(input.numerator, input.denominator))
             })
         })
         .collect::<Result<Vec<_>, String>>()?;

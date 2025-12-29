@@ -406,7 +406,7 @@ pub fn validate_split_ratios_sum(ratios: &[Split]) -> Result<(), ValidationError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::structs::Entity;
+    use crate::structs::{Entity, SplitType};
     use toml::value::Datetime;
 
     fn create_test_group() -> Group {
@@ -515,10 +515,12 @@ mod tests {
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
                 ratio: rational::Rational::new(1, 2),
+                split_type: SplitType::Ratio(rational::Rational::new(1, 2)),
             },
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
                 ratio: rational::Rational::new(1, 2),
+                split_type: SplitType::Ratio(rational::Rational::new(1, 2)),
             },
         ];
         assert!(validate_split_ratios_sum(&splits).is_ok());
@@ -530,10 +532,12 @@ mod tests {
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
                 ratio: rational::Rational::new(1, 3),
+                split_type: SplitType::Ratio(rational::Rational::new(1, 3)),
             },
             Split {
                 entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
                 ratio: rational::Rational::new(1, 3),
+                split_type: SplitType::Ratio(rational::Rational::new(1, 3)),
             },
         ];
         assert!(validate_split_ratios_sum(&splits).is_err());
@@ -559,10 +563,12 @@ mod tests {
                 Split {
                     entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
                     ratio: rational::Rational::new(1, 2),
+                    split_type: SplitType::Ratio(rational::Rational::new(1, 2)),
                 },
                 Split {
                     entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
                     ratio: rational::Rational::new(1, 2),
+                    split_type: SplitType::Ratio(rational::Rational::new(1, 2)),
                 },
             ],
         };
@@ -592,6 +598,7 @@ mod tests {
                 Split {
                     entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
                     ratio: rational::Rational::new(1, 1),
+                    split_type: SplitType::Ratio(rational::Rational::new(1, 1)),
                 },
             ],
         };

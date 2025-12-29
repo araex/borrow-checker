@@ -47,6 +47,20 @@ pub struct Transaction {
 pub struct Split {
     pub entity_id: Uuid,
     pub ratio: Rational,
+    #[serde(default)]
+    pub split_type: SplitType,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum SplitType {
+    Ratio (Rational),
+    Amount (f64)
+}
+
+impl Default for SplitType {
+    fn default() -> Self {
+        SplitType::Ratio(Rational::zero())
+    }
 }
 
 #[cfg(test)]

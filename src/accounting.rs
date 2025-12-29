@@ -94,7 +94,7 @@ pub fn get_primary_currency(transactions: &[Transaction]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::structs::Split;
+    use crate::structs::{Split,SplitType};
 
     use super::*;
     use rational::Rational;
@@ -126,6 +126,7 @@ mod tests {
                 .map(|(id, numer, denom)| Split {
                     entity_id: id,
                     ratio: Rational::new(numer, denom),
+                    split_type: SplitType::Ratio(Rational::new(numer, denom))
                 })
                 .collect(),
         }
