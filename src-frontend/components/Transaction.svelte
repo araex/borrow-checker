@@ -1,18 +1,20 @@
 <script>
-  export let expenseId;
-  export let description;
-  export let payerName;
-  export let totalAmount;
-  export let currency;
-  export let date;
-  export let userAmount;
-  export let onClick;
+  let {
+    expenseId,
+    description,
+    payerName,
+    totalAmount,
+    currency,
+    date,
+    userAmount,
+    onClick
+  } = $props();
 </script>
 
 <button
   class="expense-item group relative grid grid-cols-[1fr_auto_auto] items-center px-12 py-6 border-b border-zinc-700 cursor-pointer transition-colors hover:bg-zinc-900 w-full text-left"
   type="button"
-  on:click={() => onClick(expenseId)}
+  onclick={() => onClick(expenseId)}
 >
   <!-- Hover background effect -->
   <div

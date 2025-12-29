@@ -1,7 +1,9 @@
 <script>
-  export let currentUserName = null;
-  export let groupMembers = [];
-  export let onSettingsClick;
+  let { 
+    currentUserName = null,
+    groupMembers = [],
+    onSettingsClick
+  } = $props();
 </script>
 
 <nav class="bg-zinc-900 px-6 py-6 flex justify-between items-center border-b border-zinc-700">
@@ -33,7 +35,7 @@
       
       <button
         class="p-2 text-zinc-400 hover:text-orange-500 hover:bg-zinc-800 rounded transition-colors"
-        on:click={onSettingsClick}
+        onclick={onSettingsClick}
         title="Settings"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

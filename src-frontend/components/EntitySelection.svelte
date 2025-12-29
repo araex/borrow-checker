@@ -1,12 +1,13 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
 
-  const dispatch = createEventDispatcher();
-  let entities = [];
-  let newEntityName = '';
-  let loading = false;
-  let error = '';
+  let { onSelected } = $props();
+
+  let entities = $state([]);
+  let newEntityName = $state('');
+  let loading = $state(false);
+  let error = $state('');
 
   onMount(async () => {
     await loadEntities();
@@ -27,7 +28,7 @@
 
     try {
       await invoke('select_entity', { entityId });
-      dispatch('selected');
+      onSelected();
     } catch (e) {
       error = `Failed to select entity: ${e}`;
     } finally {
@@ -46,7 +47,7 @@
 
     try {
       await invoke('add_new_entity', { displayName: newEntityName });
-      dispatch('selected');
+      onSelected();
     } catch (e) {
       error = `Failed to add entity: ${e}`;
     } finally {
@@ -86,7 +87,7 @@
             <button
               type="button"
               class="w-full px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors disabled:opacity-50"
-              on:click={() => selectEntity(entity.id)}
+              onclick={() => selectEntity(entity.id)}
               disabled={loading}
             >
               {entity.display_name}
@@ -100,7 +101,7 @@
         <h3 class="text-sm font-medium text-zinc-300 mb-3">
           Add New Entity
         </h3>
-        <form on:submit|preventDefault={addNewEntity}>
+        <form onsubmit={(e) => { e.preventDefault(); addNewEntity(); }}>
           <input
             type="text"
             bind:value={newEntityName}

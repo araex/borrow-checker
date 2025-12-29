@@ -1,11 +1,12 @@
 <script>
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import Onboarding from './components/Onboarding.svelte';
   import EntitySelection from './components/EntitySelection.svelte';
   import MainView from './components/MainView.svelte';
 
-  let appState = 'loading'; // 'loading', 'onboarding', 'entity-selection', 'main', 'error'
-  let errorMessage = '';
+  let appState = $state('loading'); // 'loading', 'onboarding', 'entity-selection', 'main', 'error'
+  let errorMessage = $state('');
 
   onMount(async () => {
     console.log('App mounted, checking if window.__TAURI__ exists:', window.__TAURI__);
@@ -19,7 +20,6 @@
     }
 
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       console.log('Checking onboarding status...');
       
       const isOnboarded = await invoke('is_onboarded');
@@ -80,11 +80,11 @@
         <p class="font-mono text-gray-600 text-xs">Check the console for more details</p>
       </div>
     {:else if appState === 'onboarding'}
-      <Onboarding on:complete={handleOnboardingComplete} />
+      <Onboarding onComplete={handleOnboardingComplete} />
     {:else if appState === 'entity-selection'}
-      <EntitySelection on:selected={handleEntitySelected} />
+      <EntitySelection onSelected={handleEntitySelected} />
     {:else if appState === 'main'}
-      <MainView on:userReset={handleUserReset} />
+      <MainView onUserReset={handleUserReset} />
     {/if}
   </div>
 </div>

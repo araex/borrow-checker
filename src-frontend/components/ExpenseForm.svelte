@@ -1,23 +1,26 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
 
-  export let expenseId = null; // null for new expense, string for edit
-
-  const dispatch = createEventDispatcher();
+  let { 
+    expenseId = null,  // null for new expense, string for edit
+    onClose,
+    onSaved,
+    onDeleted
+  } = $props();
   
-  let loading = true;
-  let saving = false;
-  let error = '';
+  let loading = $state(true);
+  let saving = $state(false);
+  let error = $state('');
   
   // Form fields
-  let description = '';
-  let amount = 0;
-  let currency = 'USD';
-  let paidBy = '';
-  let date = new Date().toISOString().split('T')[0];
-  let participants = [];
-  let splitConfig = {}; // { entityId: { included: bool, numerator: number, denominator: number } }
+  let description = $state('');
+  let amount = $state(0);
+  let currency = $state('USD');
+  let paidBy = $state('');
+  let date = $state(new Date().toISOString().split('T')[0]);
+  let participants = $state([]);
+  let splitConfig = $state({}); // { entityId: { included: bool, numerator: number, denominator: number } }
 
   onMount(async () => {
     await loadFormData();
@@ -168,7 +171,7 @@
         });
       }
       
-      dispatch('saved');
+      onSaved();
     } catch (e) {
       error = `Failed to save expense: ${e}`;
       console.error(error);
@@ -188,7 +191,7 @@
       saving = true;
       error = '';
       await invoke('delete_expense', { expenseId });
-      dispatch('deleted');
+      onDeleted();
     } catch (e) {
       error = `Failed to delete expense: ${e}`;
       console.error(error);
@@ -198,7 +201,7 @@
   }
 
   function handleClose() {
-    dispatch('close');
+    onClose();
   }
 </script>
 
@@ -209,7 +212,7 @@
     </h2>
     <button
       class="p-2 text-zinc-400 hover:text-orange-500 hover:bg-zinc-800 rounded transition-colors"
-      on:click={handleClose}
+      onclick={handleClose}
       disabled={saving}
       title="Close"
     >
@@ -224,7 +227,7 @@
       <p class="font-mono text-gray-600 text-sm">Loading...</p>
     </div>
   {:else}
-    <form on:submit|preventDefault={handleSubmit} class="flex flex-col gap-4">
+    <form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} class="flex flex-col gap-4">
       {#if error}
         <div class="bg-red-950 border border-red-800 rounded-lg p-4">
           <p class="text-sm text-red-400">{error}</p>
@@ -273,11 +276,11 @@
                 disabled={saving}
                 class="w-full bg-zinc-950 border border-zinc-600 rounded px-4 py-2 text-zinc-200 focus:border-orange-500 focus:outline-none"
               >
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="CHF">CHF</option>
-                <option value="JPY">JPY</option>
+                <option value="USD" class="bg-zinc-950 text-zinc-200">USD</option>
+                <option value="EUR" class="bg-zinc-950 text-zinc-200">EUR</option>
+                <option value="GBP" class="bg-zinc-950 text-zinc-200">GBP</option>
+                <option value="CHF" class="bg-zinc-950 text-zinc-200">CHF</option>
+                <option value="JPY" class="bg-zinc-950 text-zinc-200">JPY</option>
               </select>
             </div>
           </div>
@@ -294,7 +297,7 @@
                 class="w-full bg-zinc-950 border border-zinc-600 rounded px-4 py-2 text-zinc-200 focus:border-orange-500 focus:outline-none"
               >
                 {#each participants as participant}
-                  <option value={participant.id}>{participant.name}</option>
+                  <option value={participant.id} class="bg-zinc-950 text-zinc-200">{participant.display_name}</option>
                 {/each}
               </select>
             </div>
@@ -332,12 +335,12 @@
                   type="checkbox"
                   id="split_include_{participant.id}"
                   bind:checked={splitConfig[participant.id].included}
-                  on:change={adjustSplitRatios}
+                  onchange={adjustSplitRatios}
                   disabled={saving}
                   class="w-4 h-4 accent-orange-500"
                 />
                 <label for="split_include_{participant.id}" class="text-zinc-200">
-                  {participant.name}
+                  {participant.display_name}
                 </label>
               </div>
               <input
@@ -373,7 +376,7 @@
         {#if expenseId}
           <button
             type="button"
-            on:click={handleDelete}
+            onclick={handleDelete}
             disabled={saving}
             class="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >

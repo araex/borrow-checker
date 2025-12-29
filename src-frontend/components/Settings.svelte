@@ -1,13 +1,13 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
 
-  const dispatch = createEventDispatcher();
+  let { onClose, onReset } = $props();
   
-  let settings = null;
-  let loading = true;
-  let error = '';
-  let copiedField = null; // 'private_key' or 'public_key'
+  let settings = $state(null);
+  let loading = $state(true);
+  let error = $state('');
+  let copiedField = $state(null); // 'private_key' or 'public_key'
 
   onMount(async () => {
     console.log('Settings component mounted');
@@ -37,7 +37,7 @@
       await invoke('reset_user');
       console.log('reset_user succeeded, dispatching reset event');
       // Trigger app to go back to entity selection
-      dispatch('reset');
+      onReset();
     } catch (e) {
       console.error('reset_user failed:', e);
       error = `Failed to reset user: ${e}`;
@@ -59,7 +59,7 @@
   }
 
   function handleClose() {
-    dispatch('close');
+    onClose();
   }
 </script>
 
@@ -68,7 +68,7 @@
     <h2 class="text-2xl font-light text-zinc-200">Settings</h2>
     <button
       class="p-2 text-zinc-400 hover:text-orange-500 hover:bg-zinc-800 rounded transition-colors"
-      on:click={handleClose}
+      onclick={handleClose}
       title="Close"
     >
       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -115,8 +115,8 @@
             <button
               type="button"
               class="w-full px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold rounded transition-colors"
-              on:click={() => {
-                console.log('Button on:click fired');
+              onclick={() => {
+                console.log('Button onclick fired');
                 handleResetUser();
               }}
             >
@@ -186,7 +186,7 @@
               />
               <button
                 class="p-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 rounded transition-colors"
-                on:click={() => copyToClipboard(settings.ssh_private_key_path, 'private_key')}
+                onclick={() => copyToClipboard(settings.ssh_private_key_path, 'private_key')}
                 title={copiedField === 'private_key' ? 'Copied!' : 'Copy to clipboard'}
               >
                 {#if copiedField === 'private_key'}
@@ -213,7 +213,7 @@
               />
               <button
                 class="p-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-zinc-300 rounded transition-colors"
-                on:click={() => copyToClipboard(settings.ssh_public_key, 'public_key')}
+                onclick={() => copyToClipboard(settings.ssh_public_key, 'public_key')}
                 title={copiedField === 'public_key' ? 'Copied!' : 'Copy to clipboard'}
               >
                 {#if copiedField === 'public_key'}

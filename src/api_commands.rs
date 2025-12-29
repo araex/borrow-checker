@@ -358,7 +358,7 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
         .iter()
         .map(|e| ParticipantInfo {
             id: e.id.to_string(),
-            name: e.display_name.clone(),
+            display_name: e.display_name.clone(),
         })
         .collect();
     

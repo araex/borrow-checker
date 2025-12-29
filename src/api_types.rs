@@ -64,7 +64,7 @@ pub struct SplitInfo {
 #[derive(Serialize)]
 pub struct ParticipantInfo {
     pub id: String,
-    pub name: String,
+    pub display_name: String,
 }
 
 #[derive(Deserialize)]

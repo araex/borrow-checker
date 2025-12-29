@@ -1,12 +1,13 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
 
-  const dispatch = createEventDispatcher();
-  let sshPublicKey = '';
-  let repoUrl = '';
-  let loading = false;
-  let error = '';
+  let { onComplete } = $props();
+
+  let sshPublicKey = $state('');
+  let repoUrl = $state('');
+  let loading = $state(false);
+  let error = $state('');
 
   onMount(async () => {
     try {
@@ -27,7 +28,7 @@
 
     try {
       await invoke('join_group', { url: repoUrl });
-      dispatch('complete');
+      onComplete();
     } catch (e) {
       error = `Failed to join group: ${e}`;
     } finally {
@@ -70,7 +71,7 @@
           <button
             class="px-3 bg-zinc-800 border border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-orange-500 hover:border-orange-500 rounded transition-colors flex-shrink-0"
             title="Copy to clipboard"
-            on:click={copyToClipboard}
+            onclick={copyToClipboard}
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
@@ -89,7 +90,7 @@
         Enter the SSH URL of your group's repository.
       </p>
 
-      <form on:submit|preventDefault={handleJoinGroup}>
+      <form onsubmit={(e) => { e.preventDefault(); handleJoinGroup(); }}>
         <input
           type="text"
           bind:value={repoUrl}

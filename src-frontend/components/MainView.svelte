@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import Header from './Header.svelte';
   import LedgerHeader from './LedgerHeader.svelte';
@@ -7,13 +7,13 @@
   import Settings from './Settings.svelte';
   import ExpenseForm from './ExpenseForm.svelte';
 
-  const dispatch = createEventDispatcher();
+  let { onUserReset } = $props();
 
-  let appState = null;
-  let transactions = [];
-  let showSettings = false;
-  let showExpenseForm = false;
-  let selectedExpenseId = null;
+  let appState = $state(null);
+  let transactions = $state([]);
+  let showSettings = $state(false);
+  let showExpenseForm = $state(false);
+  let selectedExpenseId = $state(null);
 
   onMount(async () => {
     await loadAppState();
@@ -86,7 +86,7 @@
   async function handleSettingsChange() {
     console.log('MainView: Settings reset event received, dispatching userReset');
     // User was reset, need to propagate to App to return to entity selection
-    dispatch('userReset');
+    onUserReset();
   }
 </script>
 
@@ -102,15 +102,15 @@
   <main class="relative overflow-y-auto flex flex-col z-10">
     {#if showSettings}
       <Settings
-        on:close={handleCloseView}
-        on:reset={handleSettingsChange}
+        onClose={handleCloseView}
+        onReset={handleSettingsChange}
       />
     {:else if showExpenseForm}
       <ExpenseForm
         expenseId={selectedExpenseId}
-        on:close={handleCloseView}
-        on:saved={handleExpenseSaved}
-        on:deleted={handleExpenseDeleted}
+        onClose={handleCloseView}
+        onSaved={handleExpenseSaved}
+        onDeleted={handleExpenseDeleted}
       />
     {:else}
       <!-- Main Content -->
@@ -140,7 +140,7 @@
       <!-- Add Expense Button -->
       <button
         class="fixed bottom-8 right-8 w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg flex items-center justify-center transition-colors"
-        on:click={handleAddExpense}
+        onclick={handleAddExpense}
         title="Add Expense"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">

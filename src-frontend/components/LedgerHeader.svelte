@@ -1,9 +1,11 @@
 <script>
-  export let ledgers = [];
-  export let currentLedgerId;
-  export let balances = [];
-  export let currency = 'USD';
-  export let onLedgerChange;
+  let {
+    ledgers = [],
+    currentLedgerId,
+    balances = [],
+    currency = 'USD',
+    onLedgerChange
+  } = $props();
 </script>
 
 <header
@@ -16,7 +18,7 @@
         class="text-5xl font-light uppercase tracking-tight leading-tight bg-transparent text-white border-none outline-none cursor-pointer"
         style="-webkit-appearance: none; -moz-appearance: none; appearance: none; width: fit-content;"
         value={currentLedgerId}
-        on:change={(e) => onLedgerChange(e.target.value)}
+        onchange={(e) => onLedgerChange(e.target.value)}
       >
         {#each ledgers as ledger}
           <option value={ledger.id}>{ledger.name}</option>
