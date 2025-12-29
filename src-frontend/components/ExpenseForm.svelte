@@ -18,7 +18,7 @@
   let amount = $state(0);
   let currency = $state('USD');
   let paidBy = $state('');
-  let date = $state(new Date().toISOString().split('T')[0]);
+  let date = $state(new Date().toISOString().slice(0, 16)); // Format: YYYY-MM-DDTHH:mm
   let participants = $state([]);
   let splitConfig = $state({}); // { entityId: { included: bool, numerator: number, denominator: number } }
 
@@ -38,7 +38,7 @@
         amount = expense.amount;
         currency = expense.currency;
         paidBy = expense.paid_by;
-        date = expense.date.split('T')[0]; // Extract date part
+        date = expense.date.slice(0, 16); // Format: YYYY-MM-DDTHH:mm
         participants = expense.participants;
         
         // Set up split config
@@ -303,9 +303,9 @@
             </div>
 
             <div>
-              <label for="date" class="block text-xs text-gray-500 uppercase mb-2">Date</label>
+              <label for="date" class="block text-xs text-gray-500 uppercase mb-2">Date & Time</label>
               <input
-                type="date"
+                type="datetime-local"
                 id="date"
                 bind:value={date}
                 required

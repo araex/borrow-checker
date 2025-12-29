@@ -31,6 +31,8 @@
   async function loadTransactions() {
     try {
       transactions = await invoke('get_transactions');
+      // Sort by date, newest first
+      transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
     } catch (e) {
       console.error('Failed to load transactions:', e);
     }
