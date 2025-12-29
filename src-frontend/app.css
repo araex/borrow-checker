@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
 @layer base {
+  html,
+  body {
+    color-scheme: dark;
+  }
+  
   body {
     @apply bg-zinc-950 text-gray-200 min-h-screen font-sans;
   }
