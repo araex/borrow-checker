@@ -41,7 +41,7 @@ pub async fn join_group(
     RepoManager::validate_repo_structure(&repo_path)?;
 
     // Load data from the repository
-    let persistence = GitPersistence::new(Some(repo_path.clone()))
+    let persistence = GitPersistence::new(repo_path.clone())
         .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
 
     let group = persistence
@@ -100,9 +100,14 @@ pub fn render_header(state: tauri::State<AppState>) -> Result<String, String> {
         .as_ref()
         .ok_or("Not onboarded")?;
 
-    // Use first ledger's name if available, otherwise placeholder
-    let ledger_name = ledgers_ref
-        .first()
+    // Get the current ledger's name based on current_ledger_id
+    let current_ledger_id = *state
+        .current_ledger_id
+        .lock()
+        .map_err(|e| e.to_string())?;
+    
+    let ledger_name = current_ledger_id
+        .and_then(|id| ledgers_ref.iter().find(|l| l.id == id))
         .map(|l| l.display_name.clone())
         .unwrap_or_else(|| "No Ledger".to_string());
 
@@ -192,6 +197,7 @@ pub fn render_ledger_header(state: tauri::State<AppState>) -> Result<String, Str
 
     let header = LedgerHeader::new()
         .ledger_name(&ledger.display_name)
+        .ledger_id(ledger_uuid.to_string())
         .balances(balance_list)
         .currency(&currency)
         .ledgers(available_ledgers)
@@ -210,62 +216,38 @@ pub fn switch_ledger(
     let uuid = Uuid::parse_str(&ledger_id).map_err(|e| e.to_string())?;
 
     let _ = persistence.list_ledgers();
-    let mut transactions_opt = state.transactions.lock().map_err(|e| e.to_string())?;
-    *transactions_opt = Some(
-        persistence
-            .list_transactions(uuid)
-            .map_err(|e| e.to_string())?,
-    );
+    
+    // Update transactions for the new ledger
+    {
+        let mut transactions_opt = state.transactions.lock().map_err(|e| e.to_string())?;
+        *transactions_opt = Some(
+            persistence
+                .list_transactions(uuid)
+                .map_err(|e| e.to_string())?,
+        );
+    }
 
-    let mut guard = state
-        .current_ledger_id
-        .lock()
-        .map_err(|e| format!("mutex poisoned: {e}"))?;
-    *guard = Some(uuid);
+    // Update current ledger ID
+    {
+        let mut guard = state
+            .current_ledger_id
+            .lock()
+            .map_err(|e| format!("mutex poisoned: {e}"))?;
+        *guard = Some(uuid);
+    }
 
-    let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
-    let group = state.group.lock().map_err(|e| e.to_string())?;
+    // Render the full main content with the new ledger's transactions
+    let header = render_header(state.clone())?;
+    let ledger_header = render_ledger_header(state.clone())?;
+    let transactions = render_transactions(state.clone())?;
 
-    // Handle case where not onboarded
-    let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
-    let group_ref = group.as_ref().ok_or("Not onboarded")?;
-    let user_uuid = *state
-        .user_id
-        .lock()
-        .map_err(|e| e.to_string())?
-        .as_ref()
-        .ok_or("Not onboarded")?;
-
-    // Find the ledger with the matching ID
-    let ledger_name = ledgers_ref
-        .iter()
-        .find(|l| l.id == uuid)
-        .map(|l| l.display_name.clone())
-        .unwrap_or_else(|| "Unknown Ledger".to_string());
-
-    // Get current user's display name
-    let current_user_name = group_ref
-        .entities
-        .iter()
-        .find(|e| e.id == user_uuid)
-        .map(|e| e.display_name.clone())
-        .unwrap_or_else(|| "Unknown User".to_string());
-
-    // Get other group members (excluding current user)
-    let group_members: Vec<String> = group_ref
-        .entities
-        .iter()
-        .filter(|e| e.id != user_uuid)
-        .map(|e| e.display_name.clone())
-        .collect();
-
-    let nav = Header::new()
-        .current_ledger(&ledger_name)
-        .current_user(&current_user_name)
-        .group_members(group_members)
+    let content = MainContent::new()
+        .header(header)
+        .ledger_header(ledger_header)
+        .transactions(transactions)
         .build();
 
-    Ok(nav)
+    Ok(content)
 }
 
 #[tauri::command]

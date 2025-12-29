@@ -2,7 +2,6 @@ use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{ObjectType, Repository, Tree};
 use std::collections::HashMap;
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str;
@@ -24,17 +23,9 @@ pub struct GitPersistence {
 }
 
 impl GitPersistence {
-    /// Open a repository. If `repo_path` is None the default
-    /// "data/borrow-checker-testdata/" relative to the current working directory is used.
-    pub fn new(repo_path: Option<PathBuf>) -> Result<Self, PersistenceError> {
-        let path = match repo_path {
-            Some(p) => p,
-            None => {
-                let cwd = env::current_dir()
-                    .map_err(|e| PersistenceError::DataError(format!("{}", e)))?;
-                cwd.join("data/borrow-checker-testdata/")
-            }
-        };
+    /// Open a repository at the given path.
+    pub fn new(repo_path: PathBuf) -> Result<Self, PersistenceError> {
+        let path = repo_path;
 
         let repo = Repository::open(&path)
             .map_err(|e| PersistenceError::RepositoryError(format!("{}: {}", path.display(), e)))?;
@@ -252,27 +243,30 @@ impl PersistenceRepository for GitPersistence {
             let ledger_dir_name = match entry.name() {
                 Some(n) => n.to_string(),
                 None => {
-                    eprintln!("skipping ledger entry with no name");
+                    log::warn!("skipping ledger entry with no name");
                     continue;
                 }
             };
 
+            log::info!("child entry: {:?}", entry.name());
             match entry.kind() {
                 Some(ObjectType::Tree) => {
                     // peel to child tree
                     let child_obj = match entry.to_object(&repo) {
                         Ok(o) => o,
                         Err(e) => {
-                            eprintln!("failed to read ledger folder {}: {}", ledger_dir_name, e);
+                            log::error!("failed to read ledger folder {}: {}", ledger_dir_name, e);
                             continue;
                         }
                     };
+                    log::info!("child: {:?}", child_obj);
                     let child_tree = match child_obj.peel_to_tree() {
                         Ok(t) => t,
                         Err(e) => {
-                            eprintln!(
+                            log::error!(
                                 "failed to peel ledger folder {} to tree: {}",
-                                ledger_dir_name, e
+                                ledger_dir_name,
+                                e
                             );
                             continue;
                         }
@@ -346,9 +340,10 @@ impl PersistenceRepository for GitPersistence {
                     }
                 }
                 Some(kind) => {
-                    eprintln!(
+                    log::warn!(
                         "skipping non-tree ledger entry {}: {:?}",
-                        ledger_dir_name, kind
+                        ledger_dir_name,
+                        kind
                     );
                 }
                 None => {
@@ -363,8 +358,10 @@ impl PersistenceRepository for GitPersistence {
             // Clear existing map and insert all successful entries to keep in sync.
             map.clear();
             for (id, rel_path) in successful_map_entries {
+                log::info!("entry: {:?}, {:?}", id, rel_path);
                 map.insert(id, rel_path);
             }
+            log::info!("ledger map: {:?}", map)
         }
 
         Ok(results)
@@ -552,8 +549,8 @@ impl PersistenceRepository for GitPersistence {
             Some(p) => p.clone(),
             None => {
                 return Err(PersistenceError::NotFound(format!(
-                    "ledger id {} not found",
-                    ledger_id
+                    "ledger id {} not found. Known ledgers: {:?}",
+                    ledger_id, map
                 )));
             }
         };
