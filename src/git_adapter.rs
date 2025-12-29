@@ -1,7 +1,8 @@
+use crate::ssh_keys::get_private_key_path;
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{
-    MergeOptions, ObjectType, Repository, Tree,
+    MergeOptions, ObjectType, Repository, Tree, Cred, RemoteCallbacks,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -198,6 +199,41 @@ impl GitPersistence {
         )
         .map_err(|e| {
             PersistenceError::RepositoryError(format!("failed to create commit: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Refresh the repository by pulling the latest changes.
+    pub fn refresh(&self) -> Result<(), PersistenceError> {
+        let repo = self.repo.lock().map_err(|_| {
+            PersistenceError::RepositoryError("Failed to acquire lock on repository".into())
+        })?;
+
+        let mut callbacks = RemoteCallbacks::new();
+        let private_key_path = get_private_key_path().map_err(|e| {
+            PersistenceError::RepositoryError(format!("Failed to get private key path: {}", e))
+        })?;
+        let private_key_path = private_key_path.to_owned(); // Ensure the path is owned and lives long enough
+
+        callbacks.credentials(move |_url, username_from_url, _allowed_types| {
+            Cred::ssh_key(
+                username_from_url.unwrap_or("git"),
+                None,
+                &private_key_path,
+                None,
+            )
+        });
+
+        let mut fetch_options = git2::FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+
+        let mut remote = repo.find_remote("origin").map_err(|e| {
+            PersistenceError::RepositoryError(format!("Failed to find remote 'origin': {}", e))
+        })?;
+
+        remote.fetch(&["main"], Some(&mut fetch_options), None).map_err(|e| {
+            PersistenceError::RepositoryError(format!("Failed to fetch from remote: {}", e))
         })?;
 
         Ok(())
