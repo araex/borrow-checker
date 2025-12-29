@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import QRCodeModal from './QRCodeModal.svelte';
 
   let { onClose, onReset } = $props();
   
@@ -8,6 +9,9 @@
   let loading = $state(true);
   let error = $state('');
   let copiedField = $state(null); // 'private_key' or 'public_key'
+  let showQRModal = $state(false);
+  let qrSvgContent = $state('');
+  let exportingQR = $state(false);
 
   onMount(async () => {
     console.log('Settings component mounted');
@@ -56,6 +60,26 @@
       console.error('Failed to copy to clipboard:', e);
       error = `Failed to copy: ${e}`;
     }
+  }
+
+  async function handleExportQR() {
+    try {
+      exportingQR = true;
+      error = '';
+      console.log('Exporting config as QR code...');
+      qrSvgContent = await invoke('export_config_qr');
+      showQRModal = true;
+    } catch (e) {
+      console.error('Failed to export QR code:', e);
+      error = `Failed to export QR code: ${e}`;
+    } finally {
+      exportingQR = false;
+    }
+  }
+
+  function handleCloseQRModal() {
+    showQRModal = false;
+    qrSvgContent = '';
   }
 
   function handleClose() {
@@ -228,8 +252,19 @@
               </button>
             </div>
           </div>
+          <div class="pt-2">
+            <button
+              type="button"
+              class="w-full px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={handleExportQR}
+              disabled={exportingQR}
+            >
+              {exportingQR ? 'Generating QR Code...' : 'Export Config as QR Code'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   {/if}
 </div>
+<QRCodeModal isOpen={showQRModal} onClose={handleCloseQRModal} svgContent={qrSvgContent} />

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "li.borrowchecker.app",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "bun run build:watch",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "dist"
   },

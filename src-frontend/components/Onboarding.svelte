@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import QRScanner from './QRScanner.svelte';
 
   let { onComplete } = $props();
 
@@ -8,6 +9,8 @@
   let repoUrl = $state('');
   let loading = $state(false);
   let error = $state('');
+  let showQRScanner = $state(false);
+  let importingFromQR = $state(false);
 
   onMount(async () => {
     try {
@@ -36,6 +39,31 @@
     }
   }
 
+  async function handleQRScanSuccess(qrData) {
+    importingFromQR = true;
+    error = '';
+    
+    try {
+      await invoke('import_config_qr', { qrData });
+      showQRScanner = false;
+      onComplete();
+    } catch (e) {
+      error = `Failed to import configuration: ${e}`;
+      console.error('QR import error:', e);
+    } finally {
+      importingFromQR = false;
+    }
+  }
+
+  function handleCloseScanner() {
+    showQRScanner = false;
+  }
+
+  function handleShowScanner() {
+    showQRScanner = true;
+    error = '';
+  }
+
   function copyToClipboard() {
     navigator.clipboard.writeText(sshPublicKey);
   }
@@ -51,6 +79,28 @@
       <p class="text-lg text-zinc-400 mb-2">
         Join a group by connecting to a repository
       </p>
+    </div>
+
+    <!-- Quick Import Section -->
+    <div class="card-elevated p-6 mb-6">
+      <h2 class="text-xl font-semibold text-zinc-200 mb-3">
+        Quick Import
+      </h2>
+      <p class="text-muted mb-4">
+        Import configuration and keys from another Borrow Checker instance. On mobile, scan a QR code directly. On desktop, scan with your phone and paste the content.
+      </p>
+      <button
+        type="button"
+        class="w-full px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        onclick={handleShowScanner}
+        disabled={importingFromQR}
+      >
+        {importingFromQR ? 'Importing...' : 'Import Configuration'}
+      </button>
+    </div>
+
+    <div class="text-center mb-4">
+      <span class="text-zinc-500 text-sm">— OR —</span>
     </div>
 
     <!-- SSH Key Display -->
@@ -116,3 +166,4 @@
     </div>
   </div>
 </div>
+<QRScanner isOpen={showQRScanner} onClose={handleCloseScanner} onScanSuccess={handleQRScanSuccess} />

@@ -98,6 +98,8 @@ pub fn run() {
             api_commands::get_settings,
             api_commands::refresh_data,
             api_commands::reset_user,
+            api_commands::export_config_qr,
+            api_commands::import_config_qr,
         ])
         .setup(|_app| {
             log::info!("Tauri application setup complete - logging is now active");

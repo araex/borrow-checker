@@ -35,6 +35,36 @@ pub fn get_public_key_content() -> io::Result<String> {
     fs::read_to_string(public_path)
 }
 
+/// Read the private key content
+pub fn get_private_key_content() -> io::Result<String> {
+    let private_path = get_private_key_path()?;
+    fs::read_to_string(private_path)
+}
+
+/// Import SSH keys from string content
+pub fn import_ssh_keys(private_key: &str, public_key: &str) -> io::Result<()> {
+    let private_path = get_private_key_path()?;
+    let public_path = get_public_key_path()?;
+
+    // Write private key
+    fs::write(&private_path, private_key.as_bytes())?;
+
+    // Set restrictive permissions on the private key (Unix only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&private_path)?.permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(&private_path, perms)?;
+    }
+
+    // Write public key
+    fs::write(&public_path, public_key.as_bytes())?;
+
+    log::info!("SSH keys imported successfully");
+    Ok(())
+}
+
 /// Check if SSH keys already exist
 pub fn keys_exist() -> bool {
     if let (Ok(private_path), Ok(public_path)) = (get_private_key_path(), get_public_key_path()) {

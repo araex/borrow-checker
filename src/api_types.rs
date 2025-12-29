@@ -92,3 +92,10 @@ pub struct LedgerSettingsInfo {
     pub name: String,
     pub is_current: bool,
 }
+/// Configuration export data structure for QR code sharing
+#[derive(Serialize, Deserialize)]
+pub struct ConfigExportData {
+    pub group_remote_url: String,
+    pub private_key: String,
+    pub public_key: String,
+}

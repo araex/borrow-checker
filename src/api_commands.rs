@@ -622,3 +622,109 @@ pub fn reset_user(state: tauri::State<AppState>) -> Result<(), String> {
     log::info!("User reset, returning to entity selection");
     Ok(())
 }
+/// Export configuration and SSH keys as a QR-code compatible string
+#[tauri::command]
+pub fn export_config_qr(state: tauri::State<AppState>) -> Result<String, String> {
+    use qrcode::QrCode;
+    use qrcode::render::svg;
+    
+    // Load config
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    
+    // Read SSH keys
+    let private_key = crate::ssh_keys::get_private_key_content()
+        .map_err(|e| format!("Failed to read private key: {}", e))?;
+    let public_key = crate::ssh_keys::get_public_key_content()
+        .map_err(|e| format!("Failed to read public key: {}", e))?;
+    
+    // Create export data structure
+    let export_data = ConfigExportData {
+        group_remote_url: config.group_remote_url.clone(),
+        private_key,
+        public_key,
+    };
+    
+    // Serialize to JSON
+    let json_data = serde_json::to_string(&export_data)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    
+    // Generate QR code as SVG
+    let code = QrCode::new(json_data.as_bytes())
+        .map_err(|e| format!("Failed to generate QR code: {}", e))?;
+    
+    let svg_string = code.render::<svg::Color>()
+        .min_dimensions(400, 400)
+        .build();
+    
+    Ok(svg_string)
+}
+
+/// Import configuration and SSH keys from QR-code data
+#[tauri::command]
+pub async fn import_config_qr(
+    qr_data: String,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    // Parse QR data
+    let export_data: ConfigExportData = serde_json::from_str(&qr_data)
+        .map_err(|e| format!("Invalid QR code data: {}", e))?;
+    
+    // Import SSH keys
+    crate::ssh_keys::import_ssh_keys(&export_data.private_key, &export_data.public_key)
+        .map_err(|e| format!("Failed to import SSH keys: {}", e))?;
+    
+    // Clone the repository (reuse existing join_group logic)
+    let url_clone = export_data.group_remote_url.clone();
+    let repo_path =
+        tauri::async_runtime::spawn_blocking(move || RepoManager::clone_repository(&url_clone))
+            .await
+            .map_err(|e| format!("Task join error: {}", e))??;
+
+    // Validate repository structure
+    RepoManager::validate_repo_structure(&repo_path)?;
+
+    // Load data from the repository
+    let persistence = GitPersistence::new(repo_path.clone())
+        .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
+
+    let group = persistence
+        .load_group()
+        .map_err(|e| format!("Failed to load group: {}", e))?;
+
+    let ledgers = persistence
+        .list_ledgers()
+        .map_err(|e| format!("Failed to load ledgers: {}", e))?;
+
+    if ledgers.is_empty() {
+        return Err("Repository has no ledgers".to_string());
+    }
+
+    // Use first ledger as default
+    let ledger_id = ledgers[0].id;
+
+    let transactions = persistence
+        .list_transactions(ledger_id)
+        .map_err(|e| format!("Failed to load transactions: {}", e))?;
+
+    // Update config and save to disk
+    {
+        let mut config = state.config.lock().map_err(|e| e.to_string())?;
+        config.group_remote_url = export_data.group_remote_url.clone();
+        config.local_repo_path = Some(repo_path.clone());
+        save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
+    }
+
+    // Update AppState with loaded data (but not user_id yet)
+    *state.group.lock().map_err(|e| e.to_string())? = Some(group);
+    *state.ledgers.lock().map_err(|e| e.to_string())? = Some(ledgers);
+    *state.transactions.lock().map_err(|e| e.to_string())? = Some(transactions);
+    *state.current_ledger_id.lock().map_err(|e| e.to_string())? = Some(ledger_id);
+    
+    // Register persistence with Tauri's state manager
+    app_handle.manage(Box::new(GitPersistence::new(repo_path).map_err(|e| format!("Failed to initialize persistence: {}", e))?) as Box<dyn PersistenceRepository + Send + Sync>);
+
+    log::info!("Successfully imported config from QR code");
+    
+    Ok(())
+}
