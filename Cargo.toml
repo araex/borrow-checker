@@ -11,7 +11,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.5.3", features = [] }
 
 [dependencies]
-dirs = "5.0"
+sysdirs = { version = "0.9", features = ["android-auto"] }
 git2 = { version = "0.20.3", features = ["ssh", "https"] }
 log = "0.4"
 rand = "0.8"

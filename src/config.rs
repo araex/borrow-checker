@@ -1,6 +1,9 @@
+use log::debug;
 use serde::{Deserialize, Serialize};
+use sysdirs::PathExt;
 use std::fs;
 use std::io;
+use std::path::Path;
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -29,15 +32,9 @@ impl AppConfig {
 
 /// Get the path to the config directory for this application
 pub fn get_config_dir() -> io::Result<PathBuf> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Config directory not found"))?;
+    let config_dir = sysdirs::config_dir().join("borrow-checker").ensure()?;
 
-    let app_config_dir = config_dir.join("borrow-checker");
-
-    // Create the directory if it doesn't exist
-    fs::create_dir_all(&app_config_dir)?;
-
-    Ok(app_config_dir)
+    Ok(config_dir)
 }
 
 /// Get the path to the config file
