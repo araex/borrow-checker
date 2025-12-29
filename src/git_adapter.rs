@@ -1,6 +1,8 @@
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
-use git2::{ObjectType, Repository, Tree};
+use git2::{
+    FetchOptions, MergeOptions, ObjectType, RebaseOperation, RebaseOptions, Repository, Tree,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -785,8 +787,6 @@ impl PersistenceRepository for GitPersistence {
     // ---------------- Storage Operations ----------------
 
     fn has_local_changes(&self) -> Result<bool, PersistenceError> {
-        use git2::{Oid, Repository};
-
         let repo = self.repo.lock().unwrap();
 
         // Resolve local main
@@ -822,8 +822,95 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn refresh(&self) -> Result<crate::traits::RefreshResult, PersistenceError> {
-        // For now, rebuild ledger map from current HEAD tree.
+        let repo = &self.repo.lock().unwrap();
+
+        // Remember current HEAD so we can report whether it changed after the pull --rebase
+        let old_head = repo
+            .head()
+            .and_then(|h| {
+                h.target()
+                    .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
+            })
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!(
+                    "failed to read HEAD before refresh: {e}"
+                ))
+            })?;
+
+        // --- "git pull" part: fetch origin/main (network) ---
+        {
+            let mut remote = repo.find_remote("origin").map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to find remote 'origin': {e}"))
+            })?;
+
+            let mut fo = git2::FetchOptions::new();
+            remote.fetch(&["main"], Some(&mut fo), None).map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to fetch origin/main: {e}"))
+            })?;
+        }
+
+        // Determine upstream after fetch
+        let upstream_ref = repo
+            .find_reference("refs/remotes/origin/main")
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!(
+                    "failed to find refs/remotes/origin/main after fetch: {e}"
+                ))
+            })?;
+        let upstream_annotated =
+            repo.reference_to_annotated_commit(&upstream_ref)
+                .map_err(|e| {
+                    PersistenceError::RepositoryError(format!(
+                        "failed to create annotated commit for origin/main: {e}"
+                    ))
+                })?;
+
+        // Signature for rebase commits
+        let sig = repo.signature().map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to get git signature: {e}"))
+        })?;
+
+        // --- "git rebase origin/main" part ---
+
+        let mut merge_opt = MergeOptions::new();
+        merge_opt.fail_on_conflict(true);
+        let mut rb = repo
+            .rebase(
+                None, // current branch/HEAD
+                Some(&upstream_annotated),
+                None, // no explicit onto
+                Some(&mut git2::RebaseOptions::new().merge_options(merge_opt)),
+            )
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to start rebase: {e}"))
+            })?;
+
+        rb.finish(Some(&sig)).map_err(|e| {
+            PersistenceError::RepositoryError(format!("failed to finish rebase: {e}"))
+        })?;
+
+        // Update working tree to match the rebased HEAD
+        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!(
+                    "failed to checkout HEAD after rebase: {e}"
+                ))
+            })?;
+
+        let new_head = repo
+            .head()
+            .and_then(|h| {
+                h.target()
+                    .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
+            })
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to read HEAD after refresh: {e}"))
+            })?;
+
+        let has_changes = old_head != new_head;
+
         self.build_ledger_map()?;
-        Ok(crate::traits::RefreshResult { has_changes: true })
+
+        Ok(crate::traits::RefreshResult { has_changes })
     }
 }
