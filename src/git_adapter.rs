@@ -207,7 +207,11 @@ impl PersistenceRepository for GitPersistence {
     // ---------------- Group Operations ----------------
 
     fn load_group(&self) -> Result<structs::Group, PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
+
         let text = self.read_blob_text(&repo, Path::new("group.toml"))?;
         let group: structs::Group = toml::from_str(&text)
             .map_err(|e| PersistenceError::DataError(format!("TOML parse error: {}", e)))?;
@@ -215,7 +219,10 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn save_group(&self, group: &structs::Group) -> Result<(), PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         let toml_text = toml::to_string_pretty(group).map_err(|e| {
             PersistenceError::DataError(format!("failed to serialize group: {}", e))
@@ -232,7 +239,10 @@ impl PersistenceRepository for GitPersistence {
     // ---------------- Ledger Operations ----------------
 
     fn list_ledgers(&self) -> Result<Vec<structs::Ledger>, PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         let root_tree = self.get_root_tree(&repo)?;
         let ledgers_tree = self.subtree_from_tree(&repo, &root_tree, &self.ledgers_root)?;
@@ -370,7 +380,10 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn create_ledger(&self, ledger: structs::Ledger) -> Result<Uuid, PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         let ledger_id = ledger.id;
         // Use display_name as the folder name (sanitize if needed)
@@ -413,7 +426,10 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn update_ledger(&self, ledger: structs::Ledger) -> Result<(), PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_id = ledger.id;
@@ -447,7 +463,10 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn delete_ledger(&self, id: Uuid) -> Result<(), PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map
         let ledger_rel_path = {
@@ -543,7 +562,10 @@ impl PersistenceRepository for GitPersistence {
         &self,
         ledger_id: Uuid,
     ) -> Result<Vec<structs::Transaction>, PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map (path is relative to repo root)
         let map = self.ledger_map.lock().unwrap();
@@ -611,7 +633,10 @@ impl PersistenceRepository for GitPersistence {
         ledger_id: Uuid,
         transaction: structs::Transaction,
     ) -> Result<Uuid, PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_rel_path = {
@@ -653,7 +678,10 @@ impl PersistenceRepository for GitPersistence {
         ledger_id: Uuid,
         transaction: structs::Transaction,
     ) -> Result<(), PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_rel_path = {
@@ -696,7 +724,10 @@ impl PersistenceRepository for GitPersistence {
         ledger_id: Uuid,
         transaction_id: Uuid,
     ) -> Result<(), PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map
         let ledger_rel_path = {
@@ -787,7 +818,10 @@ impl PersistenceRepository for GitPersistence {
     // ---------------- Storage Operations ----------------
 
     fn has_local_changes(&self) -> Result<bool, PersistenceError> {
-        let repo = self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Resolve local main
         let local_main = repo
@@ -822,7 +856,10 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn refresh(&self) -> Result<crate::traits::RefreshResult, PersistenceError> {
-        let repo = &self.repo.lock().unwrap();
+        let repo = &self
+            .repo
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Remember current HEAD so we can report whether it changed after the pull --rebase
         let old_head = repo
