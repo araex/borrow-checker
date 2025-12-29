@@ -56,7 +56,7 @@
                     <input
                         type="text"
                         id="new-entity-name"
-                        name="display_name"
+                        name="displayName"
                         placeholder="Enter display name"
                         class="form-input mb-4"
                         required
@@ -68,8 +68,6 @@
                         hx-tauri-invoke="add_new_entity"
                         hx-include="#new-entity-name"
                         hx-trigger="click"
-                        hx-target="body"
-                        hx-swap="innerHTML"
                     >
                         Add New Entity and Continue
                     </button>
