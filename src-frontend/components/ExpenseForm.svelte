@@ -139,8 +139,8 @@
         .filter(([_, config]) => config.included)
         .map(([entityId, config]) => ({
           entity_id: entityId,
-          numerator: config.numerator,
-          denominator: config.denominator,
+          numerator: Number(config.numerator),
+          denominator: Number(config.denominator),
         }));
       
       if (splitRatios.length === 0) {
