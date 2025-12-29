@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import Header from './Header.svelte';
   import LedgerHeader from './LedgerHeader.svelte';
@@ -14,9 +14,15 @@
   let showSettings = $state(false);
   let showExpenseForm = $state(false);
   let selectedExpenseId = $state(null);
+  let refreshInterval;
 
   onMount(async () => {
     await loadAppState();
+    startPeriodicRefresh();
+  });
+
+  onDestroy(() => {
+    stopPeriodicRefresh();
   });
 
   async function loadAppState() {
@@ -73,15 +79,29 @@
     selectedExpenseId = null;
   }
 
+  async function refreshAndReloadState() {
+    try {
+      const refreshResult = await invoke('refresh_data');
+      if (refreshResult.state_changed) {
+        console.log('State changed detected, reloading app state...');
+        await loadAppState();
+      }
+    } catch (e) {
+      console.error('Failed to refresh data:', e);
+    }
+  }
+
   async function handleExpenseSaved() {
     // Reload data after creating/updating expense
     await loadTransactions();
+    await refreshAndReloadState();
     handleCloseView();
   }
 
   async function handleExpenseDeleted() {
     // Reload data after deleting expense
     await loadTransactions();
+    await refreshAndReloadState();
     handleCloseView();
   }
 
@@ -89,6 +109,28 @@
     console.log('MainView: Settings reset event received, dispatching userReset');
     // User was reset, need to propagate to App to return to entity selection
     onUserReset();
+  }
+
+  function startPeriodicRefresh() {
+    console.log('Periodic refresh started');
+    refreshInterval = setInterval(async () => {
+      try {
+        const refreshResult = await invoke('refresh_data');
+        if (refreshResult.state_changed) {
+          console.log('State changed detected, reloading app state...');
+          await loadAppState();
+        }
+      } catch (e) {
+        console.error('Failed to refresh data:', e);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+  }
+
+  function stopPeriodicRefresh() {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
   }
 </script>
 

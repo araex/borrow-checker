@@ -206,17 +206,22 @@ impl GitPersistence {
 
     /// Refresh the repository by pulling the latest changes.
     pub fn refresh(&self) -> Result<(), PersistenceError> {
+        log::info!("Starting repository refresh...");
+
         let repo = self.repo.lock().map_err(|_| {
+            log::error!("Failed to acquire lock on repository");
             PersistenceError::RepositoryError("Failed to acquire lock on repository".into())
         })?;
 
         let mut callbacks = RemoteCallbacks::new();
         let private_key_path = get_private_key_path().map_err(|e| {
-            PersistenceError::RepositoryError(format!("Failed to get private key path: {}", e))
+            log::error!("Failed to get private key path: {e}");
+            PersistenceError::RepositoryError(format!("Failed to get private key path: {e}"))
         })?;
         let private_key_path = private_key_path.to_owned(); // Ensure the path is owned and lives long enough
 
         callbacks.credentials(move |_url, username_from_url, _allowed_types| {
+            log::info!("Setting up SSH credentials for repository access");
             Cred::ssh_key(
                 username_from_url.unwrap_or("git"),
                 None,
@@ -229,13 +234,17 @@ impl GitPersistence {
         fetch_options.remote_callbacks(callbacks);
 
         let mut remote = repo.find_remote("origin").map_err(|e| {
-            PersistenceError::RepositoryError(format!("Failed to find remote 'origin': {}", e))
+            log::error!("Failed to find remote 'origin': {e}");
+            PersistenceError::RepositoryError(format!("Failed to find remote 'origin': {e}"))
         })?;
 
+        log::info!("Fetching latest changes from remote 'origin'");
         remote.fetch(&["main"], Some(&mut fetch_options), None).map_err(|e| {
-            PersistenceError::RepositoryError(format!("Failed to fetch from remote: {}", e))
+            log::error!("Failed to fetch from remote: {e}");
+            PersistenceError::RepositoryError(format!("Failed to fetch from remote: {e}"))
         })?;
 
+        log::info!("Repository refresh completed successfully");
         Ok(())
     }
 }
