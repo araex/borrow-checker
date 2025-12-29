@@ -784,6 +784,43 @@ impl PersistenceRepository for GitPersistence {
 
     // ---------------- Storage Operations ----------------
 
+    fn has_local_changes(&self) -> Result<bool, PersistenceError> {
+        use git2::{Oid, Repository};
+
+        let repo = self.repo.lock().unwrap();
+
+        // Resolve local main
+        let local_main = repo
+            .find_reference("refs/heads/main")
+            .and_then(|r| {
+                r.target()
+                    .ok_or_else(|| git2::Error::from_str("main has no target"))
+            })
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!(
+                    "failed to resolve refs/heads/main: {}",
+                    e
+                ))
+            })?;
+
+        // Resolve origin/main (local remote-tracking branch, no fetch)
+        let origin_main = repo
+            .find_reference("refs/remotes/origin/main")
+            .and_then(|r| {
+                r.target()
+                    .ok_or_else(|| git2::Error::from_str("origin/main has no target"))
+            })
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!(
+                    "failed to resolve refs/remotes/origin/main: {}",
+                    e
+                ))
+            })?;
+
+        // If both point to same commit → no local-only commits
+        return Ok(local_main != origin_main);
+    }
+
     fn refresh(&self) -> Result<crate::traits::RefreshResult, PersistenceError> {
         // For now, rebuild ledger map from current HEAD tree.
         self.build_ledger_map()?;

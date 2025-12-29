@@ -151,6 +151,9 @@ pub trait PersistenceRepository {
     // Storage Operations
     // ------------------------------------------------------------------------
 
+    // Checks if there are local changes not published
+    fn has_local_changes(&self) -> Result<bool, PersistenceError>;
+
     /// Refreshes local data from remote storage
     fn refresh(&self) -> Result<RefreshResult, PersistenceError>;
 }
