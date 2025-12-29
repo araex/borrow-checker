@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-zinc-950 text-gray-200 min-h-screen font-sans;
+  }
+}
+
+@layer utilities {
+  .card-elevated {
+    @apply bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg;
+  }
+  
+  .text-muted {
+    @apply text-zinc-400;
+  }
+}

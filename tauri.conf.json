@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "identifier": "li.borrowchecker.app",
   "build": {
-    "frontendDist": "static"
+    "beforeDevCommand": "bun run build:dev",
+    "beforeBuildCommand": "bun run build",
+    "frontendDist": "dist"
   },
   "app": {
     "withGlobalTauri": true,
@@ -18,7 +20,8 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "devCsp": null
     }
   },
   "bundle": {

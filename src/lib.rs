@@ -4,8 +4,8 @@ use crate::git_adapter::GitPersistence;
 use crate::traits::PersistenceRepository;
 
 mod accounting;
-mod commands;
-mod components;
+mod api_commands;
+mod api_types;
 mod config;
 mod git_adapter;
 mod repo_manager;
@@ -83,21 +83,21 @@ pub fn run() {
     
     builder
         .invoke_handler(tauri::generate_handler![
-            commands::render_header,
-            commands::render_ledger_header,
-            commands::render_transactions,
-            commands::switch_ledger,
-            commands::get_expense,
-            commands::show_add_expense_form,
-            commands::render_settings,
-            commands::render_main_content,
-            commands::get_ssh_public_key,
-            commands::is_onboarded,
-            commands::join_group,
-            commands::render_entity_selection,
-            commands::select_entity,
-            commands::add_new_entity,
-            commands::reset_user,
+            api_commands::get_ssh_public_key,
+            api_commands::is_onboarded,
+            api_commands::join_group,
+            api_commands::get_entities,
+            api_commands::select_entity,
+            api_commands::add_new_entity,
+            api_commands::get_app_state,
+            api_commands::get_transactions,
+            api_commands::switch_ledger,
+            api_commands::get_expense,
+            api_commands::create_expense,
+            api_commands::update_expense,
+            api_commands::delete_expense,
+            api_commands::get_settings,
+            api_commands::reset_user,
         ])
         .setup(|_app| {
             log::info!("Tauri application setup complete - logging is now active");

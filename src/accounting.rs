@@ -60,6 +60,27 @@ pub fn get_user_share(transaction: &Transaction, user_id: Uuid) -> f64 {
     0.0
 }
 
+/// Calculate the net amount for a user in a transaction
+/// Returns:
+/// - Positive if user lent money (paid for others)
+/// - Negative if user borrowed money (others paid for them)
+/// - Zero if user paid exactly their share or wasn't involved
+pub fn calculate_user_amount(transaction: &Transaction, user_id: Uuid) -> f64 {
+    let user_share = get_user_share(transaction, user_id);
+    
+    if user_share == 0.0 {
+        return 0.0; // User not involved in this transaction
+    }
+    
+    if transaction.paid_by_entity == user_id {
+        // User paid, so they lent: (total - their share)
+        transaction.amount - user_share
+    } else {
+        // Someone else paid, so user owes their share (negative)
+        -user_share
+    }
+}
+
 /// Get the primary currency from a list of transactions
 ///
 /// Returns the currency of the first transaction, or a default "USD" if no transactions exist

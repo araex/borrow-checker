@@ -1,0 +1,26 @@
+{
+  "name": "borrow-checker",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "build:dev": "vite build --mode development"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@tauri-apps/cli": "^2",
+    "@types/bun": "latest",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "svelte": "^5.46.1",
+    "tailwindcss": "^4.1.18",
+    "vite": "^7.3.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
