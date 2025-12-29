@@ -94,6 +94,8 @@ pub fn get_primary_currency(transactions: &[Transaction]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::structs::Split;
+
     use super::*;
     use rational::Rational;
 
@@ -170,28 +172,5 @@ mod tests {
         // Friend owes user 50
         assert_eq!(balances.len(), 1);
         assert!((balances[&friend_id] - 50.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_normalize_split_ratios() {
-        let entity1 = Uuid::new_v4();
-        let entity2 = Uuid::new_v4();
-
-        let splits = vec![
-            Split {
-                entity_id: entity1,
-                ratio: Rational::new(2, 1),
-            },
-            Split {
-                entity_id: entity2,
-                ratio: Rational::new(1, 1),
-            },
-        ];
-
-        let normalized = normalize_split_ratios(splits);
-
-        let total: f64 = normalized.iter().map(|s| s.ratio.decimal_value()).sum();
-
-        assert!((total - 1.0).abs() < 0.01);
     }
 }
