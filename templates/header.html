@@ -12,12 +12,10 @@
     <div class="flex items-center gap-6">
         {% if !group_members.is_empty() %}
         <div class="flex items-center gap-3">
-            <span class="text-zinc-500 text-sm">Group:</span>
+            <span class="text-label">Group:</span>
             <div class="flex gap-2">
                 {% for member in group_members %}
-                <span
-                    class="text-zinc-300 text-sm px-3 py-1 bg-zinc-800 rounded-full border border-zinc-700"
-                >
+                <span class="badge-member">
                     {{ member }}
                 </span>
                 {% endfor %}
@@ -25,13 +23,13 @@
         </div>
         {% endif %}
         <div class="flex items-center gap-2">
-            <span class="text-zinc-500 text-sm">Logged in as:</span>
+            <span class="text-label">Logged in as:</span>
             <span class="text-orange-400 font-semibold text-sm">
                 {{ user_name }}
             </span>
         </div>
         <button
-            class="text-zinc-400 hover:text-orange-500 transition-colors p-2"
+            class="icon-btn p-2"
             hx-tauri-invoke="render_settings"
             hx-target="#main-content"
             hx-swap="innerHTML"

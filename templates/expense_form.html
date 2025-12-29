@@ -1,8 +1,8 @@
 <div class="flex flex-col h-full p-6 gap-4">
   <div class="flex items-center justify-between">
-    <h2 class="text-2xl font-bold text-orange-500">{{ form_title }}</h2>
+    <h2 class="page-title">{{ form_title }}</h2>
     <button
-      class="text-zinc-400 hover:text-orange-500 transition-colors"
+      class="icon-btn"
       hx-tauri-invoke="render_transactions"
       hx-target="#expense-list">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -14,12 +14,12 @@
   <!-- Form -->
   <form class="flex flex-col gap-4">
     <!-- Expense Info Card -->
-    <div class="bg-zinc-900 rounded-lg p-4 border border-zinc-700">
-      <h3 class="text-lg font-semibold text-zinc-300 mb-3">Expense Info</h3>
-      <div class="space-y-3">
+    <div class="card">
+      <h3 class="card-title">Expense Info</h3>
+      <div class="card-section">
         <!-- Description field -->
         <div class="form-group">
-          <label class="block text-sm font-medium text-zinc-400 mb-2" for="description">
+          <label class="form-label" for="description">
             Description
           </label>
           <input
@@ -28,13 +28,13 @@
             id="description"
             value="{{ description }}"
             required
-            class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 focus:border-orange-500 focus:outline-none transition-colors">
+            class="form-input">
         </div>
 
         <!-- Amount and Currency -->
         <div class="grid grid-cols-2 gap-4">
           <div class="form-group">
-            <label class="block text-sm font-medium text-zinc-400 mb-2" for="amount">
+            <label class="form-label" for="amount">
               Amount
             </label>
             <input
@@ -45,18 +45,18 @@
               step="0.01"
               min="0"
               required
-              class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 focus:border-orange-500 focus:outline-none transition-colors">
+              class="form-input">
           </div>
 
           <div class="form-group">
-            <label class="block text-sm font-medium text-zinc-400 mb-2" for="currency">
+            <label class="form-label" for="currency">
               Currency
             </label>
             <select
               name="currency"
               id="currency"
               required
-              class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 focus:border-orange-500 focus:outline-none transition-colors">
+              class="form-input">
               <option value="USD" {% if currency == "USD" %}selected{% endif %}>USD</option>
               <option value="EUR" {% if currency == "EUR" %}selected{% endif %}>EUR</option>
               <option value="GBP" {% if currency == "GBP" %}selected{% endif %}>GBP</option>
@@ -69,14 +69,14 @@
         <!-- Paid by and Date -->
         <div class="grid grid-cols-2 gap-4">
           <div class="form-group">
-            <label class="block text-sm font-medium text-zinc-400 mb-2" for="paid_by">
+            <label class="form-label" for="paid_by">
               Paid By
             </label>
             <select
               name="paid_by"
               id="paid_by"
               required
-              class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 focus:border-orange-500 focus:outline-none transition-colors">
+              class="form-input">
               {% for (id, name) in participants %}
               <option value="{{ id }}" {% if *id == *paid_by %}selected{% endif %}>
                 {{ name }}
@@ -86,7 +86,7 @@
           </div>
 
           <div class="form-group">
-            <label class="block text-sm font-medium text-zinc-400 mb-2" for="date">
+            <label class="form-label" for="date">
               Date
             </label>
             <input
@@ -95,15 +95,15 @@
               id="date"
               value="{% if date.contains('T') %}{{ date.split_once('T').unwrap().0 }}{% else %}{{ date }}{% endif %}"
               required
-              class="w-full bg-zinc-800 border border-zinc-700 rounded px-4 py-2 text-zinc-200 focus:border-orange-500 focus:outline-none transition-colors">
+              class="form-input">
           </div>
         </div>
       </div>
     </div>
 
     <!-- Split Card -->
-    <details class="bg-zinc-900 rounded-lg border border-zinc-700">
-      <summary class="p-4 cursor-pointer hover:bg-zinc-800/50 rounded-lg transition-colors list-none">
+    <details class="card">
+      <summary class="cursor-pointer hover:bg-zinc-800/50 rounded-lg transition-colors list-none -m-4 p-4">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-semibold text-zinc-300">Split</h3>
           <svg class="w-5 h-5 text-zinc-400 transition-transform details-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -113,7 +113,7 @@
       </summary>
       <div class="px-4 pb-4 space-y-3">
         {% for (id, name) in participants %}
-        <div class="flex items-center justify-between bg-zinc-800 rounded px-4 py-3 border border-zinc-700">
+        <div class="flex items-center justify-between card-item">
           <div class="flex items-center gap-4">
             <input
               type="checkbox"
@@ -201,7 +201,7 @@
   <div class="flex gap-4">
     <button
       type="button"
-      class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold py-2.5 px-6 rounded transition-colors border border-zinc-700"
+      class="flex-1 btn-secondary"
       hx-tauri-invoke="render_transactions"
       hx-target="#expense-list">
       Cancel
@@ -209,7 +209,7 @@
 
     <button
       type="submit"
-      class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2.5 px-6 rounded transition-colors"
+      class="flex-1 btn-primary"
       hx-tauri-invoke="{{ submit_invoke }}"
       hx-target="#main-content">
       {{ submit_label }}
