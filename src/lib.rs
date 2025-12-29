@@ -96,6 +96,7 @@ pub fn run() {
             api_commands::update_expense,
             api_commands::delete_expense,
             api_commands::get_settings,
+            api_commands::refresh_data,
             api_commands::reset_user,
         ])
         .setup(|_app| {

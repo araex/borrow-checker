@@ -597,6 +597,19 @@ pub fn get_settings(state: tauri::State<AppState>) -> Result<SettingsResponse, S
     })
 }
 
+/// Refresh data from remote repository
+#[tauri::command]
+pub fn refresh_data(
+    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+) -> Result<bool, String> {
+    let result = persistence
+        .refresh()
+        .map_err(|e| format!("Failed to refresh data: {}", e))?;
+
+    log::info!("Data refresh completed, has_changes: {}", result.has_changes);
+    Ok(result.has_changes)
+}
+
 /// Reset user selection (return to entity selection screen)
 #[tauri::command]
 pub fn reset_user(state: tauri::State<AppState>) -> Result<(), String> {
