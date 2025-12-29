@@ -25,5 +25,12 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "exclude": [
+    "target",
+    "node_modules",
+    "dist",
+    "build",
+    "gen"
+  ]
 }
