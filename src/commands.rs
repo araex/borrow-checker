@@ -322,6 +322,22 @@ pub fn render_transactions(state: tauri::State<AppState>) -> Result<String, Stri
         html.push_str(&transaction.build());
     }
 
+    // Add floating action button
+    html.push_str(r###"
+        <button
+            class="fixed bottom-12 right-12 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 z-20 font-medium"
+            type="button"
+            hx-tauri-invoke="show_add_expense_form"
+            hx-target="#expense-list"
+            title="Add Expense"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Add Expense</span>
+        </button>
+    "###);
+
     html.push_str("</section>");
 
     Ok(html)
@@ -375,6 +391,46 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
         .date(txn.transaction_datetime_rfc_3339.to_string())
         .split_ratios(txn.split_ratios.clone())
         .participants(participants)
+        .build();
+
+    Ok(form)
+}
+
+#[tauri::command]
+pub fn show_add_expense_form(state: tauri::State<AppState>) -> Result<String, String> {
+    use crate::components::ExpenseForm;
+    use crate::structs::Split;
+    use rational::Rational;
+
+    let group = state.group.lock().map_err(|e| e.to_string())?;
+    let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
+
+    // Handle case where not onboarded
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
+    let _ledger_uuid = current_ledger_id.ok_or_else(|| "No ledger selected".to_string())?;
+
+    // Get available participants from the group
+    let participants: Vec<(String, String)> = group_ref
+        .entities
+        .iter()
+        .map(|e| (e.id.to_string(), e.display_name.clone()))
+        .collect();
+
+    // Create default equal split ratios for all participants
+    let num_participants = participants.len() as i64;
+    let default_split_ratios: Vec<Split> = group_ref
+        .entities
+        .iter()
+        .map(|e| Split {
+            entity_id: e.id,
+            ratio: Rational::new(1, num_participants),
+        })
+        .collect();
+
+    // Build the expense form with defaults for a new expense (date will be empty, browser will default to today)
+    let form = ExpenseForm::new()
+        .participants(participants)
+        .split_ratios(default_split_ratios)
         .build();
 
     Ok(form)

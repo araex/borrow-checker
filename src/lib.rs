@@ -85,6 +85,7 @@ pub fn run() {
             commands::render_transactions,
             commands::switch_ledger,
             commands::get_expense,
+            commands::show_add_expense_form,
             commands::render_settings,
             commands::render_main_content,
             commands::get_ssh_public_key,
