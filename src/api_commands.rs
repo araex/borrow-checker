@@ -4,6 +4,7 @@ use crate::git_adapter::GitPersistence;
 use crate::repo_manager::RepoManager;
 use crate::structs::AppState;
 use crate::traits::PersistenceRepository;
+use tauri::Manager;
 use uuid::Uuid;
 
 /// Get the SSH public key for display during onboarding
@@ -25,7 +26,7 @@ pub fn is_onboarded(state: tauri::State<AppState>) -> Result<bool, String> {
 #[tauri::command]
 pub async fn join_group(
     url: String,
-    _app_handle: tauri::AppHandle,
+    app_handle: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     log::info!("Attempting to join group with URL: {}", url);
@@ -67,7 +68,7 @@ pub async fn join_group(
     {
         let mut config = state.config.lock().map_err(|e| e.to_string())?;
         config.group_remote_url = url.clone();
-        config.local_repo_path = Some(repo_path);
+        config.local_repo_path = Some(repo_path.clone());
         save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
     }
 
@@ -76,6 +77,9 @@ pub async fn join_group(
     *state.ledgers.lock().map_err(|e| e.to_string())? = Some(ledgers);
     *state.transactions.lock().map_err(|e| e.to_string())? = Some(transactions);
     *state.current_ledger_id.lock().map_err(|e| e.to_string())? = Some(ledger_id);
+    
+    // Register persistence with Tauri's state manager
+    app_handle.manage(Box::new(GitPersistence::new(repo_path).map_err(|e| format!("Failed to initialize persistence: {}", e))?) as Box<dyn PersistenceRepository + Send + Sync>);
 
     log::info!("Successfully joined group and loaded data");
 
@@ -131,7 +135,11 @@ pub fn select_entity(entity_id: String, state: tauri::State<AppState>) -> Result
 
 /// Add a new entity to the group
 #[tauri::command]
-pub fn add_new_entity(display_name: String, state: tauri::State<AppState>) -> Result<(), String> {
+pub fn add_new_entity(
+    display_name: String,
+    state: tauri::State<AppState>,
+    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+) -> Result<(), String> {
     if display_name.trim().is_empty() {
         return Err("Display name cannot be empty".to_string());
     }
@@ -158,15 +166,6 @@ pub fn add_new_entity(display_name: String, state: tauri::State<AppState>) -> Re
         });
 
         // Save to persistence
-        let config = state.config.lock().map_err(|e| e.to_string())?;
-        let repo_path = config
-            .local_repo_path
-            .as_ref()
-            .ok_or("Repository path not set")?;
-
-        let persistence = GitPersistence::new(repo_path.clone())
-            .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
-
         persistence
             .save_group(&group_ref)
             .map_err(|e| format!("Failed to save group: {}", e))?;
@@ -299,18 +298,13 @@ pub fn get_transactions(state: tauri::State<AppState>) -> Result<Vec<Transaction
 
 /// Switch to a different ledger
 #[tauri::command]
-pub fn switch_ledger(ledger_id: String, state: tauri::State<AppState>) -> Result<(), String> {
+pub fn switch_ledger(
+    ledger_id: String,
+    state: tauri::State<AppState>,
+    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+) -> Result<(), String> {
     let ledger_uuid =
         Uuid::parse_str(&ledger_id).map_err(|e| format!("Invalid ledger ID: {}", e))?;
-
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    let repo_path = config
-        .local_repo_path
-        .as_ref()
-        .ok_or("Repository path not set")?;
-
-    let persistence = GitPersistence::new(repo_path.clone())
-        .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
 
     // Build ledger map by listing ledgers
     persistence
@@ -384,6 +378,7 @@ pub fn create_expense(
     date: String,
     split_ratios: Vec<SplitInput>,
     state: tauri::State<AppState>,
+    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
 ) -> Result<String, String> {
     use rational::Rational;
     use toml::value::Datetime;
@@ -418,13 +413,8 @@ pub fn create_expense(
     };
     
     // Save to persistence
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    let repo_path = config.local_repo_path.as_ref().ok_or("Repository path not set")?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?
         .ok_or("No ledger selected")?.clone();
-    
-    let persistence = GitPersistence::new(repo_path.clone())
-        .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
     
     // Build ledger map by listing ledgers
     persistence
@@ -456,6 +446,7 @@ pub fn update_expense(
     date: String,
     split_ratios: Vec<SplitInput>,
     state: tauri::State<AppState>,
+    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
 ) -> Result<(), String> {
     use rational::Rational;
     use toml::value::Datetime;
@@ -488,13 +479,8 @@ pub fn update_expense(
     };
     
     // Save to persistence
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    let repo_path = config.local_repo_path.as_ref().ok_or("Repository path not set")?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?
         .ok_or("No ledger selected")?.clone();
-    
-    let persistence = GitPersistence::new(repo_path.clone())
-        .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
     
     // Build ledger map by listing ledgers
     persistence
@@ -519,17 +505,16 @@ pub fn update_expense(
 
 /// Delete an expense
 #[tauri::command]
-pub fn delete_expense(expense_id: String, state: tauri::State<AppState>) -> Result<(), String> {
+pub fn delete_expense(
+    expense_id: String,
+    state: tauri::State<AppState>,
+    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+) -> Result<(), String> {
     let expense_uuid = Uuid::parse_str(&expense_id).map_err(|e| format!("Invalid expense ID: {}", e))?;
     
     // Delete from persistence
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    let repo_path = config.local_repo_path.as_ref().ok_or("Repository path not set")?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?
         .ok_or("No ledger selected")?.clone();
-    
-    let persistence = GitPersistence::new(repo_path.clone())
-        .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
     
     // Build ledger map by listing ledgers
     persistence

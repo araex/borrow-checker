@@ -51,7 +51,7 @@ pub fn run() {
             user_id: std::sync::Mutex::new(user_id),
         };
         
-        (app, Some(GitPersistence::new(repo_path).unwrap()))
+        (app, Some(Box::new(GitPersistence::new(repo_path).unwrap()) as Box<dyn PersistenceRepository + Send + Sync>))
     } else {
         eprintln!("[INFO] User not onboarded, starting with empty state");
         
@@ -76,7 +76,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(app_state);
     
-    // Only manage persistence if user is onboarded
     if let Some(persistence) = persistence_instance {
         builder = builder.manage(persistence);
     }
