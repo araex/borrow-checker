@@ -433,18 +433,15 @@ impl PersistenceRepository for GitPersistence {
 
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_id = ledger.id;
-        let ledger_rel_path = {
-            let map = self.ledger_map.lock().unwrap();
-            match map.get(&ledger_id) {
-                Some(p) => p.clone(),
-                None => {
-                    return Err(PersistenceError::NotFound(format!(
-                        "ledger id {} not found",
-                        ledger_id
-                    )));
-                }
-            }
-        };
+        let ledger_rel_path = self
+            .ledger_map
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}")))
+            .and_then(|map| {
+                map.get(&ledger_id).cloned().ok_or_else(|| {
+                    PersistenceError::NotFound(format!("ledger id {} not found", ledger_id))
+                })
+            })?;
 
         // Relative path to the marker file in the repo (e.g. "ledgers/39C3/.ledger.toml")
         let rel_file_path = ledger_rel_path.join(".ledger.toml");
@@ -469,18 +466,15 @@ impl PersistenceRepository for GitPersistence {
             .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map
-        let ledger_rel_path = {
-            let map = self.ledger_map.lock().unwrap();
-            match map.get(&id) {
-                Some(p) => p.clone(),
-                None => {
-                    return Err(PersistenceError::NotFound(format!(
-                        "ledger id {} not found",
-                        id
-                    )));
-                }
-            }
-        };
+        let ledger_rel_path = self
+            .ledger_map
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}")))
+            .and_then(|map| {
+                map.get(&id).cloned().ok_or_else(|| {
+                    PersistenceError::NotFound(format!("ledger id {} not found", id))
+                })
+            })?;
 
         // Ensure repository has a working directory
         let workdir = repo.workdir().ok_or_else(|| {
@@ -684,18 +678,15 @@ impl PersistenceRepository for GitPersistence {
             .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map (path is relative to repo root)
-        let ledger_rel_path = {
-            let map = self.ledger_map.lock().unwrap();
-            match map.get(&ledger_id) {
-                Some(p) => p.clone(),
-                None => {
-                    return Err(PersistenceError::NotFound(format!(
-                        "ledger id {} not found",
-                        ledger_id
-                    )));
-                }
-            }
-        };
+        let ledger_rel_path = self
+            .ledger_map
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}")))
+            .and_then(|map| {
+                map.get(&ledger_id).cloned().ok_or_else(|| {
+                    PersistenceError::NotFound(format!("ledger id {} not found", ledger_id))
+                })
+            })?;
 
         let transaction_id = transaction.id;
         let rel_file_path = ledger_rel_path.join(format!("{}.toml", transaction_id));
@@ -730,18 +721,15 @@ impl PersistenceRepository for GitPersistence {
             .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map
-        let ledger_rel_path = {
-            let map = self.ledger_map.lock().unwrap();
-            match map.get(&ledger_id) {
-                Some(p) => p.clone(),
-                None => {
-                    return Err(PersistenceError::NotFound(format!(
-                        "ledger id {} not found",
-                        ledger_id
-                    )));
-                }
-            }
-        };
+        let ledger_rel_path = self
+            .ledger_map
+            .lock()
+            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}")))
+            .and_then(|map| {
+                map.get(&ledger_id).cloned().ok_or_else(|| {
+                    PersistenceError::NotFound(format!("ledger id {} not found", ledger_id))
+                })
+            })?;
 
         let rel_file_path = ledger_rel_path.join(format!("{}.toml", transaction_id));
 
