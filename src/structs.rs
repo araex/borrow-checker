@@ -32,12 +32,6 @@ pub struct Ledger {
     pub participants: Vec<Uuid>,
 }
 
-#[derive(Clone)]
-pub struct LedgerWithTransactions {
-    pub ledger: Ledger,
-    pub transactions: Vec<Transaction>,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Transaction {
     pub id: Uuid,

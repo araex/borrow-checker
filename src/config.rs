@@ -1,9 +1,7 @@
-use log::debug;
 use serde::{Deserialize, Serialize};
 use sysdirs::PathExt;
 use std::fs;
 use std::io;
-use std::path::Path;
 use std::path::PathBuf;
 use uuid::Uuid;
 

@@ -1,4 +1,4 @@
-use crate::structs::{Split, Transaction};
+use crate::structs::{Transaction};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -91,30 +91,6 @@ pub fn get_primary_currency(transactions: &[Transaction]) -> String {
         .unwrap_or_else(|| String::from("USD"))
 }
 
-/// Normalize split ratios to sum to 1
-///
-/// Algorithm: Calculate total ratio, divide each by total
-pub fn normalize_split_ratios(ratios: Vec<Split>) -> Vec<Split> {
-    // Calculate total ratio
-    let total: f64 = ratios.iter().map(|split| split.ratio.decimal_value()).sum();
-
-    if total == 0.0 {
-        return ratios;
-    }
-
-    // Normalize each ratio
-    ratios
-        .into_iter()
-        .map(|split| {
-            let current_ratio = split.ratio.decimal_value();
-            let normalized = current_ratio / total;
-            Split {
-                entity_id: split.entity_id,
-                ratio: rational::Rational::new((normalized * 1_000_000.0) as i64, 1_000_000),
-            }
-        })
-        .collect()
-}
 
 #[cfg(test)]
 mod tests {

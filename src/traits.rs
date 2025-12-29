@@ -74,6 +74,7 @@ impl From<git2::Error> for PersistenceError {
 
 /// Result of a refresh operation
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct RefreshResult {
     /// Whether anything has changed in the remote storage
     pub has_changes: bool,
@@ -109,12 +110,15 @@ pub trait PersistenceRepository {
     /// Create a new ledger in the repository
     ///
     /// Returns the UUID of the newly created ledger
+    #[allow(dead_code)]
     fn create_ledger(&self, ledger: Ledger) -> Result<Uuid, PersistenceError>;
 
     /// Update ledger metadata (display_name, participants)
+    #[allow(dead_code)]
     fn update_ledger(&self, ledger: Ledger) -> Result<(), PersistenceError>;
 
     /// Remove a ledger and optionally its transactions
+    #[allow(dead_code)]
     fn delete_ledger(&self, id: Uuid) -> Result<(), PersistenceError>;
 
     // ------------------------------------------------------------------------
@@ -152,8 +156,10 @@ pub trait PersistenceRepository {
     // ------------------------------------------------------------------------
 
     // Checks if there are local changes not published
+    #[allow(dead_code)]
     fn has_local_changes(&self) -> Result<bool, PersistenceError>;
 
     /// Refreshes local data from remote storage
+    #[allow(dead_code)]
     fn refresh(&self) -> Result<RefreshResult, PersistenceError>;
 }

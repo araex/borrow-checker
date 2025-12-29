@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 /// Result of validation operations
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ValidationResult {
     /// Whether validation passed
     pub is_valid: bool,
@@ -38,6 +39,7 @@ pub struct ValidationResult {
 
 /// A single validation error
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ValidationError {
     /// Field name or path (e.g., "split_ratios[0].entity_id")
     pub field: String,
@@ -49,6 +51,7 @@ pub struct ValidationError {
 
 /// Types of validation errors
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ValidationErrorType {
     /// Required field is missing
     MissingField,
@@ -74,6 +77,7 @@ pub enum ValidationErrorType {
 /// - At least one entity exists
 /// - All entity IDs are unique
 /// - All entity display names are not empty
+#[allow(dead_code)]
 pub fn validate_group(group: &Group) -> ValidationResult {
     let mut errors = Vec::new();
 
@@ -124,6 +128,7 @@ pub fn validate_group(group: &Group) -> ValidationResult {
 /// - Display name is not empty
 /// - All participants exist in group
 /// - Participants list is not empty
+#[allow(dead_code)]
 pub fn validate_ledger(ledger: &Ledger, group: &Group) -> ValidationResult {
     let mut errors = Vec::new();
 
@@ -186,6 +191,7 @@ pub fn validate_ledger(ledger: &Ledger, group: &Group) -> ValidationResult {
 /// - Amount is positive
 /// - Description is not empty
 /// - Datetime is valid (handled by type system)
+#[allow(dead_code)]
 pub fn validate_transaction(
     transaction: &Transaction,
     ledger: &Ledger,
@@ -311,6 +317,7 @@ pub fn validate_transaction(
 // ============================================================================
 
 /// Ensure a UUID reference exists in group entities
+#[allow(dead_code)]
 pub fn validate_entity_reference(entity_id: Uuid, group: &Group) -> Result<(), ValidationError> {
     if group.entities.iter().any(|e| e.id == entity_id) {
         Ok(())
@@ -327,6 +334,7 @@ pub fn validate_entity_reference(entity_id: Uuid, group: &Group) -> Result<(), V
 ///
 /// This is a simplified validation - checks format only.
 /// For production, consider using a comprehensive currency code list.
+#[allow(dead_code)]
 pub fn validate_currency(code: &str) -> Result<(), ValidationError> {
     // Check that it's exactly 3 uppercase letters
     if code.len() != 3 {
@@ -358,6 +366,7 @@ pub fn validate_currency(code: &str) -> Result<(), ValidationError> {
 }
 
 /// Ensure sum of all ratios equals 1 (within tolerance of 0.001)
+#[allow(dead_code)]
 pub fn validate_split_ratios_sum(ratios: &[Split]) -> Result<(), ValidationError> {
     if ratios.is_empty() {
         return Err(ValidationError {

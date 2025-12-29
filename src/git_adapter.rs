@@ -1,7 +1,7 @@
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{
-    FetchOptions, MergeOptions, ObjectType, RebaseOperation, RebaseOptions, Repository, Tree,
+    MergeOptions, ObjectType, Repository, Tree,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -116,6 +116,7 @@ impl GitPersistence {
     /// Build the ledger map by scanning the ledgers folder.
     ///
     /// This will delegate to list_ledgers which updates the internal map for successfully parsed ledgers.
+    #[allow(dead_code)]
     fn build_ledger_map(&self) -> Result<(), PersistenceError> {
         // list_ledgers updates the internal ledger_map with relative paths for successfully parsed ledgers.
         let _ = self.list_ledgers()?;
@@ -571,7 +572,7 @@ impl PersistenceRepository for GitPersistence {
             .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map (path is relative to repo root)
-        let mut map = self.ledger_map.lock().map_err(|e| {
+        let map = self.ledger_map.lock().map_err(|e| {
             PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}"))
         })?;
 
@@ -646,7 +647,7 @@ impl PersistenceRepository for GitPersistence {
 
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_rel_path = {
-            let mut map = self.ledger_map.lock().map_err(|e| {
+            let map = self.ledger_map.lock().map_err(|e| {
                 PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}"))
             })?;
 
