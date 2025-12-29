@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
 use std::path::PathBuf;
+use uuid::Uuid;
 
 /// Application configuration
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -10,6 +11,8 @@ pub struct AppConfig {
     pub group_remote_url: String,
     /// The local path where the cloned repository lives
     pub local_repo_path: Option<PathBuf>,
+    /// The user's selected entity ID
+    pub user_id: Option<Uuid>,
 }
 
 impl AppConfig {
@@ -19,6 +22,7 @@ impl AppConfig {
             // Hardcoded for now, will be user-configurable later
             group_remote_url: String::from("https://github.com/araex/borrow-checker-testdata.git"),
             local_repo_path: None,
+            user_id: None,
         }
     }
 }

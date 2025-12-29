@@ -1,0 +1,125 @@
+<div
+    id="main-container"
+    class="flex flex-col w-[calc(100vw-48px)] max-w-[1400px] h-[calc(100vh-48px)] bg-black border border-zinc-700 shadow-[20px_20px_60px_#050505,-5px_-5px_20px_rgba(255,255,255,0.02)] relative overflow-hidden"
+    hx-swap-oob="true"
+>
+    <div class="min-h-full flex items-start justify-center overflow-y-auto">
+        <div class="w-full max-w-2xl px-6 py-12">
+            <!-- Header -->
+            <div class="mb-6 text-center">
+                <h1
+                    class="text-orange-500 font-bold tracking-[0.5rem] uppercase text-4xl"
+                >
+                    Borrow Checker
+                </h1>
+                <p class="text-lg text-zinc-400 mb-2">
+                    Select your identity
+                </p>
+            </div>
+
+        <!-- Entity Selection -->
+        <div class="card-elevated p-6 mb-6">
+            <h2 class="text-xl font-semibold text-zinc-200 mb-3">
+                Who are you?
+            </h2>
+            <p class="text-muted mb-4">
+                Select your entity from the group or add a new one.
+            </p>
+
+            <!-- Existing Entities -->
+            <div class="mb-6">
+                <h3 class="text-sm font-medium text-zinc-300 mb-3">
+                    Existing Entities
+                </h3>
+                <div id="entity-list" class="space-y-2">
+                    {% for entity in entities %}
+                    <button
+                        type="button"
+                        name="entityId"
+                        value="{{ entity.id }}"
+                        class="w-full btn-primary py-3 px-4 text-left"
+                        hx-tauri-invoke="select_entity"
+                        hx-trigger="click"
+                    >
+                        {{ entity.display_name }}
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Add New Entity -->
+            <div class="border-t border-zinc-700 pt-6">
+                <h3 class="text-sm font-medium text-zinc-300 mb-3">
+                    Add New Entity
+                </h3>
+                <form id="new-entity-form" onsubmit="return false;">
+                    <input
+                        type="text"
+                        id="new-entity-name"
+                        name="display_name"
+                        placeholder="Enter display name"
+                        class="form-input mb-4"
+                        required
+                    />
+                    <button
+                        id="add-entity-btn"
+                        type="button"
+                        class="w-full btn-secondary py-3 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
+                        hx-tauri-invoke="add_new_entity"
+                        hx-include="#new-entity-name"
+                        hx-trigger="click"
+                        hx-target="body"
+                        hx-swap="innerHTML"
+                    >
+                        Add New Entity and Continue
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Error Display -->
+        <div
+            id="error-display"
+            class="hidden bg-red-950 border border-red-800 rounded-lg shadow-[20px_20px_60px_#050505,-5px_-5px_20px_rgba(255,255,255,0.02)] p-4"
+        >
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg
+                        class="h-5 w-5 text-red-400"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                    >
+                        <path
+                            fill-rule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clip-rule="evenodd"
+                        />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-300">Error</h3>
+                    <p id="error-message" class="mt-1 text-sm text-red-400"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Handle htmx events for error display
+    document.body.addEventListener("htmx:beforeRequest", function (evt) {
+        document.getElementById("error-display").classList.add("hidden");
+    });
+
+    document.body.addEventListener("htmx:afterRequest", function (evt) {
+        if (!evt.detail.successful) {
+            const errorMsg =
+                evt.detail.xhr?.responseText ||
+                "An unexpected error occurred";
+            document.getElementById("error-message").textContent = errorMsg;
+            document
+                .getElementById("error-display")
+                .classList.remove("hidden");
+        }
+    });
+</script>

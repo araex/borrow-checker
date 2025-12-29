@@ -71,17 +71,124 @@ pub async fn join_group(
         save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
     }
 
-    // Update AppState with loaded data
-    let user_id = group.entities.get(0).ok_or("Group has no entities")?.id;
+    // Update AppState with loaded data (but not user_id yet)
     *state.group.lock().map_err(|e| e.to_string())? = Some(group);
     *state.ledgers.lock().map_err(|e| e.to_string())? = Some(ledgers);
     *state.transactions.lock().map_err(|e| e.to_string())? = Some(transactions);
     *state.current_ledger_id.lock().map_err(|e| e.to_string())? = Some(ledger_id);
-    *state.user_id.lock().map_err(|e| e.to_string())? = Some(user_id);
+    // user_id will be set when user selects or adds an entity
 
     log::info!("Successfully joined group and loaded data");
 
-    // Return the main content to trigger navigation
+    // Return entity selection screen instead of main content
+    render_entity_selection(state)
+}
+
+/// Render the entity selection screen
+#[tauri::command]
+pub fn render_entity_selection(state: tauri::State<AppState>) -> Result<String, String> {
+    use crate::components::EntitySelection;
+
+    let group = state.group.lock().map_err(|e| e.to_string())?;
+    let group_ref = group.as_ref().ok_or("Group not loaded")?;
+
+    let entity_selection = EntitySelection::new()
+        .entities(group_ref.entities.clone())
+        .build();
+
+    Ok(entity_selection)
+}
+
+/// Select an existing entity as the current user
+#[tauri::command]
+pub fn select_entity(
+    entity_id: String,
+    state: tauri::State<AppState>,
+) -> Result<String, String> {
+    let entity_uuid = Uuid::parse_str(&entity_id)
+        .map_err(|e| format!("Invalid entity ID: {}", e))?;
+
+    // Verify entity exists in group
+    {
+        let group = state.group.lock().map_err(|e| e.to_string())?;
+        let group_ref = group.as_ref().ok_or("Group not loaded")?;
+        
+        if !group_ref.entities.iter().any(|e| e.id == entity_uuid) {
+            return Err("Entity not found in group".to_string());
+        }
+    }
+
+    // Set user_id in state and config
+    *state.user_id.lock().map_err(|e| e.to_string())? = Some(entity_uuid);
+
+    // Save to config
+    {
+        let mut config = state.config.lock().map_err(|e| e.to_string())?;
+        config.user_id = Some(entity_uuid);
+        save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
+    }
+
+    log::info!("User selected entity: {}", entity_uuid);
+
+    // Return the main content to complete onboarding
+    render_main_content(state)
+}
+
+/// Add a new entity to the group
+#[tauri::command]
+pub fn add_new_entity(
+    display_name: String,
+    state: tauri::State<AppState>,
+) -> Result<String, String> {
+    if display_name.trim().is_empty() {
+        return Err("Display name cannot be empty".to_string());
+    }
+
+    let new_entity_id = Uuid::new_v4();
+
+    // Add entity to group
+    {
+        let mut group = state.group.lock().map_err(|e| e.to_string())?;
+        let group_ref = group.as_mut().ok_or("Group not loaded")?;
+
+        // Check if entity name already exists
+        if group_ref.entities.iter().any(|e| e.display_name == display_name) {
+            return Err("An entity with this name already exists".to_string());
+        }
+
+        group_ref.entities.push(crate::structs::Entity {
+            id: new_entity_id,
+            display_name: display_name.clone(),
+        });
+
+        // Save to persistence
+        let config = state.config.lock().map_err(|e| e.to_string())?;
+        let repo_path = config
+            .local_repo_path
+            .as_ref()
+            .ok_or("Repository path not set")?;
+
+        let persistence = GitPersistence::new(repo_path.clone())
+            .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
+
+        persistence
+            .save_group(&group_ref)
+            .map_err(|e| format!("Failed to save group: {}", e))?;
+
+        log::info!("Added new entity '{}' with ID: {}", display_name, new_entity_id);
+    }
+
+    // Set user_id to the new entity in state and config
+    *state.user_id.lock().map_err(|e| e.to_string())? = Some(new_entity_id);
+
+    // Save to config
+    {
+        let mut config = state.config.lock().map_err(|e| e.to_string())?;
+        config.user_id = Some(new_entity_id);
+        save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
+    }
+
+    // Return the main content to complete onboarding
     render_main_content(state)
 }
 
@@ -501,12 +608,31 @@ pub fn render_settings(state: tauri::State<AppState>) -> Result<String, String> 
     Ok(settings)
 }
 
+/// Reset the current user and show entity selection
+#[tauri::command]
+pub fn reset_user(state: tauri::State<AppState>) -> Result<String, String> {
+    // Clear user_id in state and config
+    *state.user_id.lock().map_err(|e| e.to_string())? = None;
+
+    // Save to config
+    {
+        let mut config = state.config.lock().map_err(|e| e.to_string())?;
+        config.user_id = None;
+        save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
+    }
+
+    log::info!("User reset, showing entity selection");
+
+    // Show entity selection screen
+    render_entity_selection(state)
+}
+
 #[tauri::command]
 pub fn render_main_content(state: tauri::State<AppState>) -> Result<String, String> {
     log::info!("render_main_content called");
     use crate::components::OnboardingScreen;
 
-    // Check if user is onboarded
+    // Check if user is onboarded (repo cloned)
     let is_onboarded = {
         let config = state.config.lock().map_err(|e| e.to_string())?;
         config.local_repo_path.is_some()
@@ -527,10 +653,26 @@ pub fn render_main_content(state: tauri::State<AppState>) -> Result<String, Stri
         return Ok(onboarding);
     }
 
+    // Check if user has selected an entity
+    let has_user_id = {
+        let user_id = state.user_id.lock().map_err(|e| e.to_string())?;
+        user_id.is_some()
+    };
+
+    if !has_user_id {
+        log::info!("User has not selected entity, showing entity selection");
+        return render_entity_selection(state);
+    }
+
+    log::info!("User has selected entity, rendering main content");
+
     // Render header, ledger header and transactions
     let header = render_header(state.clone())?;
+    log::info!("Header rendered");
     let ledger_header = render_ledger_header(state.clone())?;
+    log::info!("Ledger header rendered");
     let transactions = render_transactions(state)?;
+    log::info!("Transactions rendered");
 
     let content = MainContent::new()
         .header(header)
@@ -538,5 +680,6 @@ pub fn render_main_content(state: tauri::State<AppState>) -> Result<String, Stri
         .transactions(transactions)
         .build();
 
+    log::info!("Main content built successfully");
     Ok(content)
 }

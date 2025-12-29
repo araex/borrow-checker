@@ -34,9 +34,12 @@ pub fn run() {
         let group = persistence.load_group().unwrap();
         let ledgers = persistence.list_ledgers().unwrap();
 
-        // @todo load from config
+        // Use first ledger as default
         let ledger_id = ledgers[0].id;
-        let user_id = group.entities[0].id;
+        
+        // Use user_id from config if available
+        let user_id = config.user_id;
+        
         let transactions = persistence.list_transactions(ledger_id).unwrap();
 
         let app = structs::AppState {
@@ -45,7 +48,7 @@ pub fn run() {
             ledgers: std::sync::Mutex::new(Some(ledgers)),
             transactions: std::sync::Mutex::new(Some(transactions)),
             current_ledger_id: std::sync::Mutex::new(Some(ledger_id)),
-            user_id: std::sync::Mutex::new(Some(user_id)),
+            user_id: std::sync::Mutex::new(user_id),
         };
         
         (app, Some(GitPersistence::new(repo_path).unwrap()))
@@ -91,6 +94,10 @@ pub fn run() {
             commands::get_ssh_public_key,
             commands::is_onboarded,
             commands::join_group,
+            commands::render_entity_selection,
+            commands::select_entity,
+            commands::add_new_entity,
+            commands::reset_user,
         ])
         .setup(|_app| {
             log::info!("Tauri application setup complete - logging is now active");

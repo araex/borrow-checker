@@ -424,3 +424,33 @@ impl Default for OnboardingScreen {
         Self::new()
     }
 }
+
+#[derive(Template)]
+#[template(path = "entity_selection.html")]
+pub struct EntitySelection {
+    entities: Vec<crate::structs::Entity>,
+}
+
+impl EntitySelection {
+    pub fn new() -> Self {
+        Self {
+            entities: Vec::new(),
+        }
+    }
+
+    pub fn entities(mut self, entities: Vec<crate::structs::Entity>) -> Self {
+        self.entities = entities;
+        self
+    }
+
+    pub fn build(self) -> String {
+        self.render()
+            .unwrap_or_else(|e| format!("Template error: {}", e))
+    }
+}
+
+impl Default for EntitySelection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
