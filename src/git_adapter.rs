@@ -366,7 +366,10 @@ impl PersistenceRepository for GitPersistence {
 
         // Update internal map with successfully parsed ledgers (store relative paths).
         {
-            let mut map = self.ledger_map.lock().unwrap();
+            let mut map = self.ledger_map.lock().map_err(|e| {
+                PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}"))
+            })?;
+
             // Clear existing map and insert all successful entries to keep in sync.
             map.clear();
             for (id, rel_path) in successful_map_entries {
@@ -418,7 +421,10 @@ impl PersistenceRepository for GitPersistence {
 
         // Update the ledger_map with the new ledger
         {
-            let mut map = self.ledger_map.lock().unwrap();
+            let mut map = self.ledger_map.lock().map_err(|e| {
+                PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}"))
+            })?;
+
             map.insert(ledger_id, ledger_rel_path);
         }
 
@@ -543,7 +549,10 @@ impl PersistenceRepository for GitPersistence {
 
         // Remove from ledger_map
         {
-            let mut map = self.ledger_map.lock().unwrap();
+            let mut map = self.ledger_map.lock().map_err(|e| {
+                PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}"))
+            })?;
+
             map.remove(&id);
         }
 
@@ -562,7 +571,10 @@ impl PersistenceRepository for GitPersistence {
             .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
         // Find ledger relative path in map (path is relative to repo root)
-        let map = self.ledger_map.lock().unwrap();
+        let mut map = self.ledger_map.lock().map_err(|e| {
+            PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}"))
+        })?;
+
         let ledger_path = match map.get(&ledger_id) {
             Some(p) => p.clone(),
             None => {
@@ -634,7 +646,10 @@ impl PersistenceRepository for GitPersistence {
 
         // Find ledger relative path in map (path is relative to repo root)
         let ledger_rel_path = {
-            let map = self.ledger_map.lock().unwrap();
+            let mut map = self.ledger_map.lock().map_err(|e| {
+                PersistenceError::RepositoryError(format!("Can not lock ledger_map: {e}"))
+            })?;
+
             match map.get(&ledger_id) {
                 Some(p) => p.clone(),
                 None => {
