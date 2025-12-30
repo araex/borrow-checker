@@ -18,6 +18,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: oven-sh/setup-bun@v2
     - name: Restore cache
+      id: cargo-cache
       uses: actions/cache@v5
       with:
         path: |
@@ -28,7 +29,8 @@ jobs:
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Install Tauri
-      run: cargo install tauri-cli --version "^2.0" --locked --force
+      if: steps.cargo-cache.outputs.cache-hit != 'true'
+      run: cargo install tauri-cli --version "^2.0" --locked
     - name: Build
       run: cargo tauri build
     - name: Run tests
