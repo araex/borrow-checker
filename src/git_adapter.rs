@@ -2,8 +2,8 @@ use crate::ssh_keys::get_private_key_path;
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{
-    Cred, MergeOptions, ObjectType, PushOptions, RebaseOperationType, RemoteCallbacks, Repository,
-    Tree,
+    Cred, MergeOptions, ObjectType, Oid, PushOptions, RebaseOperationType, RemoteCallbacks,
+    Repository, Tree,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -163,24 +163,22 @@ fn persist_and_commit(
     Ok(())
 }
 
-fn repo_has_local_changes(repo: &Repository) -> Result<bool, PersistenceError> {
-    let local_main = repo
-        .find_reference("refs/heads/main")
-        .and_then(|r| {
-            r.target()
-                .ok_or_else(|| git2::Error::from_str("main has no target"))
+fn get_local_head_oid(repo: &Repository) -> Result<Oid, PersistenceError> {
+    repo
+        .head()
+        .and_then(|head| {
+            head.target()
+                .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
         })
-        .map_err(|e| {
-            PersistenceError::RepositoryError(format!(
-                "failed to resolve refs/heads/main: {}",
-                e
-            ))
-        })?;
+        .map_err(|e| PersistenceError::RepositoryError(format!("failed to resolve HEAD: {}", e)))
+}
 
-    let origin_main = repo
+fn get_origin_main_oid(repo: &Repository) -> Result<Oid, PersistenceError> {
+    repo
         .find_reference("refs/remotes/origin/main")
-        .and_then(|r| {
-            r.target()
+        .and_then(|reference| {
+            reference
+                .target()
                 .ok_or_else(|| git2::Error::from_str("origin/main has no target"))
         })
         .map_err(|e| {
@@ -188,9 +186,13 @@ fn repo_has_local_changes(repo: &Repository) -> Result<bool, PersistenceError> {
                 "failed to resolve refs/remotes/origin/main: {}",
                 e
             ))
-        })?;
+        })
+}
 
-    Ok(local_main != origin_main)
+fn repo_has_local_changes(repo: &Repository) -> Result<bool, PersistenceError> {
+    let local_head = get_local_head_oid(repo)?;
+    let origin_main = get_origin_main_oid(repo)?;
+    Ok(local_head != origin_main)
 }
 
 impl GitPersistence {
