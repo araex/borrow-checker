@@ -24,5 +24,7 @@ jobs:
       run: cargo tauri build
     - name: Run tests
       run: cargo test
+    - name: Init Android build
+      run: cargo tauri android init --ci
     - name: Build Android
-      run: cargo tauri android build
+      run: cargo tauri android build --ci
