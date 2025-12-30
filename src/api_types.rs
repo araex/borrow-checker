@@ -92,6 +92,11 @@ pub struct LedgerSettingsInfo {
     pub name: String,
     pub is_current: bool,
 }
+
+#[derive(Serialize)]
+pub struct RefreshDataResponse {
+    pub state_changed: bool,
+}
 /// Configuration export data structure for QR code sharing
 #[derive(Serialize, Deserialize)]
 pub struct ConfigExportData {

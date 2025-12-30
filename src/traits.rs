@@ -1,6 +1,7 @@
 use crate::structs::{Group, Ledger, Transaction};
 use std::error::Error;
 use std::fmt;
+use std::sync::Arc;
 use uuid::Uuid;
 
 // ============================================================================
@@ -79,6 +80,9 @@ pub struct RefreshResult {
     /// Whether anything has changed in the remote storage
     pub has_changes: bool,
 }
+
+/// Shared persistence handle used across async boundaries
+pub type SharedPersistence = Arc<dyn PersistenceRepository + Send + Sync>;
 
 // ============================================================================
 // Persistence Trait

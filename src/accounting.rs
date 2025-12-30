@@ -1,4 +1,4 @@
-use crate::structs::{Transaction};
+use crate::structs::Transaction;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -11,10 +11,7 @@ use uuid::Uuid;
 /// Algorithm: For each transaction:
 /// - If user paid: they are owed by each other participant for their share
 /// - If user didn't pay: they owe the payer their share
-pub fn calculate_balances(
-    transactions: &[Transaction],
-    user_id: Uuid,
-) -> HashMap<Uuid, f64> {
+pub fn calculate_balances(transactions: &[Transaction], user_id: Uuid) -> HashMap<Uuid, f64> {
     let mut balances: HashMap<Uuid, f64> = HashMap::new();
 
     for transaction in transactions {
@@ -67,11 +64,11 @@ pub fn get_user_share(transaction: &Transaction, user_id: Uuid) -> f64 {
 /// - Zero if user paid exactly their share or wasn't involved
 pub fn calculate_user_amount(transaction: &Transaction, user_id: Uuid) -> f64 {
     let user_share = get_user_share(transaction, user_id);
-    
+
     if user_share == 0.0 {
         return 0.0; // User not involved in this transaction
     }
-    
+
     if transaction.paid_by_entity == user_id {
         // User paid, so they lent: (total - their share)
         transaction.amount - user_share
@@ -91,10 +88,9 @@ pub fn get_primary_currency(transactions: &[Transaction]) -> String {
         .unwrap_or_else(|| String::from("USD"))
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::structs::{Split,SplitType};
+    use crate::structs::{Split, SplitType};
 
     use super::*;
     use rational::Rational;
@@ -126,7 +122,7 @@ mod tests {
                 .map(|(id, numer, denom)| Split {
                     entity_id: id,
                     ratio: Rational::new(numer, denom),
-                    split_type: SplitType::Ratio(Rational::new(numer, denom))
+                    split_type: SplitType::Ratio(Rational::new(numer, denom)),
                 })
                 .collect(),
         }

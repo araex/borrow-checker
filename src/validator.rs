@@ -221,7 +221,10 @@ pub fn validate_transaction(
     if transaction.amount <= 0.0 {
         errors.push(ValidationError {
             field: "amount".to_string(),
-            message: format!("Transaction amount must be positive, got: {}", transaction.amount),
+            message: format!(
+                "Transaction amount must be positive, got: {}",
+                transaction.amount
+            ),
             error_type: ValidationErrorType::InvalidValue,
         });
     }
@@ -378,13 +381,13 @@ pub fn validate_split_ratios_sum(ratios: &[Split]) -> Result<(), ValidationError
 
     let sum: rational::Rational = ratios.iter().map(|s| s.ratio).sum();
     let one = rational::Rational::one();
-    
+
     // Define tolerance as 1/1000
     let tolerance = rational::Rational::new(1, 1000);
-    
+
     // Check if |sum - 1| <= tolerance
     let diff = if sum > one { sum - one } else { one - sum };
-    
+
     if diff > tolerance {
         Err(ValidationError {
             field: "ratios".to_string(),
@@ -406,7 +409,7 @@ pub fn validate_split_ratios_sum(ratios: &[Split]) -> Result<(), ValidationError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::structs::{Entity, SplitType};
+    use crate::structs::Entity;
     use toml::value::Datetime;
 
     fn create_test_group() -> Group {
@@ -445,9 +448,7 @@ mod tests {
 
     #[test]
     fn test_validate_group_empty() {
-        let group = Group {
-            entities: vec![],
-        };
+        let group = Group { entities: vec![] };
         let result = validate_group(&group);
         assert!(!result.is_valid);
         assert_eq!(result.errors.len(), 1);
@@ -471,7 +472,12 @@ mod tests {
         };
         let result = validate_group(&group);
         assert!(!result.is_valid);
-        assert!(result.errors.iter().any(|e| matches!(e.error_type, ValidationErrorType::DuplicateValue)));
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| matches!(e.error_type, ValidationErrorType::DuplicateValue))
+        );
     }
 
     #[test]
@@ -487,11 +493,18 @@ mod tests {
     fn test_validate_ledger_invalid_participant() {
         let group = create_test_group();
         let mut ledger = create_test_ledger();
-        ledger.participants.push(Uuid::parse_str("00000000-0000-0000-0000-000000000999").unwrap());
-        
+        ledger
+            .participants
+            .push(Uuid::parse_str("00000000-0000-0000-0000-000000000999").unwrap());
+
         let result = validate_ledger(&ledger, &group);
         assert!(!result.is_valid);
-        assert!(result.errors.iter().any(|e| matches!(e.error_type, ValidationErrorType::InvalidReference)));
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|e| matches!(e.error_type, ValidationErrorType::InvalidReference))
+        );
     }
 
     #[test]
@@ -547,7 +560,7 @@ mod tests {
     fn test_validate_transaction_success() {
         let group = create_test_group();
         let ledger = create_test_ledger();
-        
+
         let transaction = Transaction {
             id: Uuid::parse_str("00000000-0000-0000-0000-000000000200").unwrap(),
             description: "Test transaction".to_string(),
@@ -555,7 +568,11 @@ mod tests {
             currency_iso_4217: "EUR".to_string(),
             amount: 100.0,
             transaction_datetime_rfc_3339: Datetime {
-                date: Some(toml::value::Date { year: 2025, month: 12, day: 28 }),
+                date: Some(toml::value::Date {
+                    year: 2025,
+                    month: 12,
+                    day: 28,
+                }),
                 time: None,
                 offset: None,
             },
@@ -582,7 +599,7 @@ mod tests {
     fn test_validate_transaction_invalid_amount() {
         let group = create_test_group();
         let ledger = create_test_ledger();
-        
+
         let transaction = Transaction {
             id: Uuid::parse_str("00000000-0000-0000-0000-000000000200").unwrap(),
             description: "Test transaction".to_string(),
@@ -590,17 +607,19 @@ mod tests {
             currency_iso_4217: "EUR".to_string(),
             amount: -50.0,
             transaction_datetime_rfc_3339: Datetime {
-                date: Some(toml::value::Date { year: 2025, month: 12, day: 28 }),
+                date: Some(toml::value::Date {
+                    year: 2025,
+                    month: 12,
+                    day: 28,
+                }),
                 time: None,
                 offset: None,
             },
-            split_ratios: vec![
-                Split {
-                    entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
-                    ratio: rational::Rational::new(1, 1),
-                    split_type: SplitType::Ratio(rational::Rational::new(1, 1)),
-                },
-            ],
+            split_ratios: vec![Split {
+                entity_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+                ratio: rational::Rational::new(1, 1),
+                split_type: SplitType::Ratio(rational::Rational::new(1, 1)),
+            }],
         };
 
         let result = validate_transaction(&transaction, &ledger, &group);

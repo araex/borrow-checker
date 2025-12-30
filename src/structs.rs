@@ -53,8 +53,8 @@ pub struct Split {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum SplitType {
-    Ratio (Rational),
-    Amount (f64)
+    Ratio(Rational),
+    Amount(f64),
 }
 
 impl Default for SplitType {

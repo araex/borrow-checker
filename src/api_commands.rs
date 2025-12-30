@@ -3,7 +3,8 @@ use crate::config::save_config;
 use crate::git_adapter::GitPersistence;
 use crate::repo_manager::RepoManager;
 use crate::structs::{AppState, SplitType};
-use crate::traits::PersistenceRepository;
+use crate::traits::SharedPersistence;
+use std::sync::Arc;
 use tauri::Manager;
 use uuid::Uuid;
 
@@ -42,8 +43,10 @@ pub async fn join_group(
     RepoManager::validate_repo_structure(&repo_path)?;
 
     // Load data from the repository
-    let persistence = GitPersistence::new(repo_path.clone())
-        .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
+    let persistence: SharedPersistence = Arc::new(
+        GitPersistence::new(repo_path.clone())
+            .map_err(|e| format!("Failed to initialize persistence: {}", e))?,
+    );
 
     let group = persistence
         .load_group()
@@ -77,9 +80,9 @@ pub async fn join_group(
     *state.ledgers.lock().map_err(|e| e.to_string())? = Some(ledgers);
     *state.transactions.lock().map_err(|e| e.to_string())? = Some(transactions);
     *state.current_ledger_id.lock().map_err(|e| e.to_string())? = Some(ledger_id);
-    
+
     // Register persistence with Tauri's state manager
-    app_handle.manage(Box::new(GitPersistence::new(repo_path).map_err(|e| format!("Failed to initialize persistence: {}", e))?) as Box<dyn PersistenceRepository + Send + Sync>);
+    app_handle.manage(persistence.clone());
 
     log::info!("Successfully joined group and loaded data");
 
@@ -138,13 +141,14 @@ pub fn select_entity(entity_id: String, state: tauri::State<AppState>) -> Result
 pub fn add_new_entity(
     display_name: String,
     state: tauri::State<AppState>,
-    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+    persistence: tauri::State<SharedPersistence>,
 ) -> Result<(), String> {
     if display_name.trim().is_empty() {
         return Err("Display name cannot be empty".to_string());
     }
 
     let new_entity_id = Uuid::new_v4();
+    let persistence = persistence.inner();
 
     // Add entity to group
     {
@@ -301,10 +305,12 @@ pub fn get_transactions(state: tauri::State<AppState>) -> Result<Vec<Transaction
 pub fn switch_ledger(
     ledger_id: String,
     state: tauri::State<AppState>,
-    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+    persistence: tauri::State<SharedPersistence>,
 ) -> Result<(), String> {
     let ledger_uuid =
         Uuid::parse_str(&ledger_id).map_err(|e| format!("Invalid ledger ID: {}", e))?;
+
+    let persistence = persistence.inner();
 
     // Build ledger map by listing ledgers
     persistence
@@ -323,20 +329,24 @@ pub fn switch_ledger(
 
 /// Get detailed expense information for editing
 #[tauri::command]
-pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<ExpenseDetailResponse, String> {
-    let expense_uuid = Uuid::parse_str(&expense_id).map_err(|e| format!("Invalid expense ID: {}", e))?;
-    
+pub fn get_expense(
+    expense_id: String,
+    state: tauri::State<AppState>,
+) -> Result<ExpenseDetailResponse, String> {
+    let expense_uuid =
+        Uuid::parse_str(&expense_id).map_err(|e| format!("Invalid expense ID: {}", e))?;
+
     let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
     let group = state.group.lock().map_err(|e| e.to_string())?;
-    
+
     let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
     let group_ref = group.as_ref().ok_or("Not onboarded")?;
-    
+
     let transaction = transactions_ref
         .iter()
         .find(|t| t.id == expense_uuid)
         .ok_or("Expense not found")?;
-    
+
     let split_ratios: Vec<SplitInfo> = transaction
         .split_ratios
         .iter()
@@ -346,7 +356,7 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
             denominator: split.ratio.denominator() as i64,
         })
         .collect();
-    
+
     let participants: Vec<ParticipantInfo> = group_ref
         .entities
         .iter()
@@ -355,7 +365,7 @@ pub fn get_expense(expense_id: String, state: tauri::State<AppState>) -> Result<
             display_name: e.display_name.clone(),
         })
         .collect();
-    
+
     Ok(ExpenseDetailResponse {
         id: transaction.id.to_string(),
         description: transaction.description.clone(),
@@ -378,17 +388,20 @@ pub fn create_expense(
     date: String,
     split_ratios: Vec<SplitInput>,
     state: tauri::State<AppState>,
-    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+    persistence: tauri::State<SharedPersistence>,
 ) -> Result<String, String> {
     use rational::Rational;
     use toml::value::Datetime;
-    
-    let paid_by_uuid = Uuid::parse_str(&paid_by).map_err(|e| format!("Invalid paid_by ID: {}", e))?;
+
+    let paid_by_uuid =
+        Uuid::parse_str(&paid_by).map_err(|e| format!("Invalid paid_by ID: {}", e))?;
     let expense_id = Uuid::new_v4();
-    
+
     // Parse date string to Datetime
-    let datetime: Datetime = date.parse().map_err(|e| format!("Invalid date format: {}", e))?;
-    
+    let datetime: Datetime = date
+        .parse()
+        .map_err(|e| format!("Invalid date format: {}", e))?;
+
     // Convert split inputs to Split structs
     let splits: Vec<crate::structs::Split> = split_ratios
         .into_iter()
@@ -398,11 +411,11 @@ pub fn create_expense(
             Ok(crate::structs::Split {
                 entity_id,
                 ratio: Rational::new(input.numerator, input.denominator),
-                split_type: SplitType::Ratio(Rational::new(input.numerator, input.denominator))
+                split_type: SplitType::Ratio(Rational::new(input.numerator, input.denominator)),
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    
+
     let transaction = crate::structs::Transaction {
         id: expense_id,
         description,
@@ -412,26 +425,32 @@ pub fn create_expense(
         transaction_datetime_rfc_3339: datetime,
         split_ratios: splits,
     };
-    
+
     // Save to persistence
-    let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?
-        .ok_or("No ledger selected")?.clone();
-    
+    let current_ledger_id = state
+        .current_ledger_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .ok_or("No ledger selected")?
+        .clone();
+
+    let persistence = persistence.inner();
+
     // Build ledger map by listing ledgers
     persistence
         .list_ledgers()
         .map_err(|e| format!("Failed to load ledgers: {}", e))?;
-    
+
     persistence
         .create_transaction(current_ledger_id, transaction.clone())
         .map_err(|e| format!("Failed to save transaction: {}", e))?;
-    
+
     // Update state
     let mut transactions = state.transactions.lock().map_err(|e| e.to_string())?;
     if let Some(ref mut txns) = *transactions {
         txns.push(transaction);
     }
-    
+
     log::info!("Created expense: {}", expense_id);
     Ok(expense_id.to_string())
 }
@@ -447,16 +466,20 @@ pub fn update_expense(
     date: String,
     split_ratios: Vec<SplitInput>,
     state: tauri::State<AppState>,
-    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+    persistence: tauri::State<SharedPersistence>,
 ) -> Result<(), String> {
     use rational::Rational;
     use toml::value::Datetime;
-    
-    let expense_uuid = Uuid::parse_str(&expense_id).map_err(|e| format!("Invalid expense ID: {}", e))?;
-    let paid_by_uuid = Uuid::parse_str(&paid_by).map_err(|e| format!("Invalid paid_by ID: {}", e))?;
-    
-    let datetime: Datetime = date.parse().map_err(|e| format!("Invalid date format: {}", e))?;
-    
+
+    let expense_uuid =
+        Uuid::parse_str(&expense_id).map_err(|e| format!("Invalid expense ID: {}", e))?;
+    let paid_by_uuid =
+        Uuid::parse_str(&paid_by).map_err(|e| format!("Invalid paid_by ID: {}", e))?;
+
+    let datetime: Datetime = date
+        .parse()
+        .map_err(|e| format!("Invalid date format: {}", e))?;
+
     let splits: Vec<crate::structs::Split> = split_ratios
         .into_iter()
         .map(|input| {
@@ -465,11 +488,11 @@ pub fn update_expense(
             Ok(crate::structs::Split {
                 entity_id,
                 ratio: Rational::new(input.numerator, input.denominator),
-                split_type: SplitType::Ratio(Rational::new(input.numerator, input.denominator))
+                split_type: SplitType::Ratio(Rational::new(input.numerator, input.denominator)),
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    
+
     let transaction = crate::structs::Transaction {
         id: expense_uuid,
         description,
@@ -479,20 +502,26 @@ pub fn update_expense(
         transaction_datetime_rfc_3339: datetime,
         split_ratios: splits,
     };
-    
+
     // Save to persistence
-    let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?
-        .ok_or("No ledger selected")?.clone();
-    
+    let current_ledger_id = state
+        .current_ledger_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .ok_or("No ledger selected")?
+        .clone();
+
+    let persistence = persistence.inner();
+
     // Build ledger map by listing ledgers
     persistence
         .list_ledgers()
         .map_err(|e| format!("Failed to load ledgers: {}", e))?;
-    
+
     persistence
         .update_transaction(current_ledger_id, transaction.clone())
         .map_err(|e| format!("Failed to update transaction: {}", e))?;
-    
+
     // Update state
     let mut transactions = state.transactions.lock().map_err(|e| e.to_string())?;
     if let Some(ref mut txns) = *transactions {
@@ -500,7 +529,7 @@ pub fn update_expense(
             txns[pos] = transaction;
         }
     }
-    
+
     log::info!("Updated expense: {}", expense_id);
     Ok(())
 }
@@ -510,29 +539,36 @@ pub fn update_expense(
 pub fn delete_expense(
     expense_id: String,
     state: tauri::State<AppState>,
-    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
+    persistence: tauri::State<SharedPersistence>,
 ) -> Result<(), String> {
-    let expense_uuid = Uuid::parse_str(&expense_id).map_err(|e| format!("Invalid expense ID: {}", e))?;
-    
+    let expense_uuid =
+        Uuid::parse_str(&expense_id).map_err(|e| format!("Invalid expense ID: {}", e))?;
+
     // Delete from persistence
-    let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?
-        .ok_or("No ledger selected")?.clone();
-    
+    let current_ledger_id = state
+        .current_ledger_id
+        .lock()
+        .map_err(|e| e.to_string())?
+        .ok_or("No ledger selected")?
+        .clone();
+
+    let persistence = persistence.inner();
+
     // Build ledger map by listing ledgers
     persistence
         .list_ledgers()
         .map_err(|e| format!("Failed to load ledgers: {}", e))?;
-    
+
     persistence
         .delete_transaction(current_ledger_id, expense_uuid)
         .map_err(|e| format!("Failed to delete transaction: {}", e))?;
-    
+
     // Update state
     let mut transactions = state.transactions.lock().map_err(|e| e.to_string())?;
     if let Some(ref mut txns) = *transactions {
         txns.retain(|t| t.id != expense_uuid);
     }
-    
+
     log::info!("Deleted expense: {}", expense_id);
     Ok(())
 }
@@ -545,31 +581,31 @@ pub fn get_settings(state: tauri::State<AppState>) -> Result<SettingsResponse, S
     let ledgers = state.ledgers.lock().map_err(|e| e.to_string())?;
     let current_ledger_id = state.current_ledger_id.lock().map_err(|e| e.to_string())?;
     let user_id = state.user_id.lock().map_err(|e| e.to_string())?;
-    
+
     let group_ref = group.as_ref().ok_or("Not onboarded")?;
     let ledgers_ref = ledgers.as_ref().ok_or("Not onboarded")?;
     let user_uuid = user_id.as_ref().ok_or("No user selected")?;
     let current_ledger_uuid = current_ledger_id.ok_or("No ledger selected")?;
-    
+
     let user_name = group_ref
         .entities
         .iter()
         .find(|e| e.id == *user_uuid)
         .map(|e| e.display_name.clone())
         .ok_or("User not found")?;
-    
+
     let group_members: Vec<String> = group_ref
         .entities
         .iter()
         .map(|e| e.display_name.clone())
         .collect();
-    
+
     let current_ledger_name = ledgers_ref
         .iter()
         .find(|l| l.id == current_ledger_uuid)
         .map(|l| l.display_name.clone())
         .unwrap_or_else(|| "Unknown".to_string());
-    
+
     let ledger_list: Vec<LedgerSettingsInfo> = ledgers_ref
         .iter()
         .map(|l| LedgerSettingsInfo {
@@ -578,15 +614,15 @@ pub fn get_settings(state: tauri::State<AppState>) -> Result<SettingsResponse, S
             is_current: l.id == current_ledger_uuid,
         })
         .collect();
-    
+
     let ssh_private_key_path = crate::ssh_keys::get_private_key_path()
         .map_err(|e| format!("Failed to get SSH key path: {}", e))?
         .to_string_lossy()
         .to_string();
-    
+
     let ssh_public_key = crate::ssh_keys::get_public_key_content()
         .map_err(|e| format!("Failed to read SSH public key: {}", e))?;
-    
+
     Ok(SettingsResponse {
         user_id: user_uuid.to_string(),
         user_name,
@@ -601,26 +637,36 @@ pub fn get_settings(state: tauri::State<AppState>) -> Result<SettingsResponse, S
 
 /// Refresh data from remote repository
 #[tauri::command]
-pub fn refresh_data(
-    persistence: tauri::State<Box<dyn PersistenceRepository + Send + Sync>>,
-) -> Result<bool, String> {
-    let result = persistence
-        .refresh()
+pub async fn refresh_data(
+    persistence: tauri::State<'_, SharedPersistence>,
+) -> Result<RefreshDataResponse, String> {
+    let persistence = persistence.inner().clone();
+    log::info!("Start Data refresh",);
+
+    let result = tauri::async_runtime::spawn_blocking(move || persistence.refresh())
+        .await
+        .map_err(|e| format!("Failed to join refresh task: {}", e))?
         .map_err(|e| format!("Failed to refresh data: {}", e))?;
 
-    log::info!("Data refresh completed, has_changes: {}", result.has_changes);
-    Ok(result.has_changes)
+    log::info!(
+        "Data refresh completed, has_changes: {}",
+        result.has_changes
+    );
+
+    Ok(RefreshDataResponse {
+        state_changed: result.has_changes,
+    })
 }
 
 /// Reset user selection (return to entity selection screen)
 #[tauri::command]
 pub fn reset_user(state: tauri::State<AppState>) -> Result<(), String> {
     *state.user_id.lock().map_err(|e| e.to_string())? = None;
-    
+
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     config.user_id = None;
     save_config(&config).map_err(|e| format!("Failed to save config: {}", e))?;
-    
+
     log::info!("User reset, returning to entity selection");
     Ok(())
 }
@@ -629,35 +675,33 @@ pub fn reset_user(state: tauri::State<AppState>) -> Result<(), String> {
 pub fn export_config_qr(state: tauri::State<AppState>) -> Result<String, String> {
     use qrcode::QrCode;
     use qrcode::render::svg;
-    
+
     // Load config
     let config = state.config.lock().map_err(|e| e.to_string())?;
-    
+
     // Read SSH keys
     let private_key = crate::ssh_keys::get_private_key_content()
         .map_err(|e| format!("Failed to read private key: {}", e))?;
     let public_key = crate::ssh_keys::get_public_key_content()
         .map_err(|e| format!("Failed to read public key: {}", e))?;
-    
+
     // Create export data structure
     let export_data = ConfigExportData {
         group_remote_url: config.group_remote_url.clone(),
         private_key,
         public_key,
     };
-    
+
     // Serialize to JSON
     let json_data = serde_json::to_string(&export_data)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
-    
+
     // Generate QR code as SVG
     let code = QrCode::new(json_data.as_bytes())
         .map_err(|e| format!("Failed to generate QR code: {}", e))?;
-    
-    let svg_string = code.render::<svg::Color>()
-        .min_dimensions(400, 400)
-        .build();
-    
+
+    let svg_string = code.render::<svg::Color>().min_dimensions(400, 400).build();
+
     Ok(svg_string)
 }
 
@@ -669,13 +713,13 @@ pub async fn import_config_qr(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     // Parse QR data
-    let export_data: ConfigExportData = serde_json::from_str(&qr_data)
-        .map_err(|e| format!("Invalid QR code data: {}", e))?;
-    
+    let export_data: ConfigExportData =
+        serde_json::from_str(&qr_data).map_err(|e| format!("Invalid QR code data: {}", e))?;
+
     // Import SSH keys
     crate::ssh_keys::import_ssh_keys(&export_data.private_key, &export_data.public_key)
         .map_err(|e| format!("Failed to import SSH keys: {}", e))?;
-    
+
     // Clone the repository (reuse existing join_group logic)
     let url_clone = export_data.group_remote_url.clone();
     let repo_path =
@@ -687,8 +731,10 @@ pub async fn import_config_qr(
     RepoManager::validate_repo_structure(&repo_path)?;
 
     // Load data from the repository
-    let persistence = GitPersistence::new(repo_path.clone())
-        .map_err(|e| format!("Failed to initialize persistence: {}", e))?;
+    let persistence: SharedPersistence = Arc::new(
+        GitPersistence::new(repo_path.clone())
+            .map_err(|e| format!("Failed to initialize persistence: {}", e))?,
+    );
 
     let group = persistence
         .load_group()
@@ -722,11 +768,11 @@ pub async fn import_config_qr(
     *state.ledgers.lock().map_err(|e| e.to_string())? = Some(ledgers);
     *state.transactions.lock().map_err(|e| e.to_string())? = Some(transactions);
     *state.current_ledger_id.lock().map_err(|e| e.to_string())? = Some(ledger_id);
-    
+
     // Register persistence with Tauri's state manager
-    app_handle.manage(Box::new(GitPersistence::new(repo_path).map_err(|e| format!("Failed to initialize persistence: {}", e))?) as Box<dyn PersistenceRepository + Send + Sync>);
+    app_handle.manage(persistence.clone());
 
     log::info!("Successfully imported config from QR code");
-    
+
     Ok(())
 }

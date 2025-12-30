@@ -2,7 +2,7 @@ use crate::ssh_keys::get_private_key_path;
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{
-    MergeOptions, ObjectType, Repository, Tree, Cred, RemoteCallbacks,
+    Cred, MergeOptions, ObjectType, RebaseOperationType, RemoteCallbacks, Repository, Tree,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -201,50 +201,6 @@ impl GitPersistence {
             PersistenceError::RepositoryError(format!("failed to create commit: {}", e))
         })?;
 
-        Ok(())
-    }
-
-    /// Refresh the repository by pulling the latest changes.
-    pub fn refresh(&self) -> Result<(), PersistenceError> {
-        log::info!("Starting repository refresh...");
-
-        let repo = self.repo.lock().map_err(|_| {
-            log::error!("Failed to acquire lock on repository");
-            PersistenceError::RepositoryError("Failed to acquire lock on repository".into())
-        })?;
-
-        let mut callbacks = RemoteCallbacks::new();
-        let private_key_path = get_private_key_path().map_err(|e| {
-            log::error!("Failed to get private key path: {e}");
-            PersistenceError::RepositoryError(format!("Failed to get private key path: {e}"))
-        })?;
-        let private_key_path = private_key_path.to_owned(); // Ensure the path is owned and lives long enough
-
-        callbacks.credentials(move |_url, username_from_url, _allowed_types| {
-            log::info!("Setting up SSH credentials for repository access");
-            Cred::ssh_key(
-                username_from_url.unwrap_or("git"),
-                None,
-                &private_key_path,
-                None,
-            )
-        });
-
-        let mut fetch_options = git2::FetchOptions::new();
-        fetch_options.remote_callbacks(callbacks);
-
-        let mut remote = repo.find_remote("origin").map_err(|e| {
-            log::error!("Failed to find remote 'origin': {e}");
-            PersistenceError::RepositoryError(format!("Failed to find remote 'origin': {e}"))
-        })?;
-
-        log::info!("Fetching latest changes from remote 'origin'");
-        remote.fetch(&["main"], Some(&mut fetch_options), None).map_err(|e| {
-            log::error!("Failed to fetch from remote: {e}");
-            PersistenceError::RepositoryError(format!("Failed to fetch from remote: {e}"))
-        })?;
-
-        log::info!("Repository refresh completed successfully");
         Ok(())
     }
 }
@@ -905,97 +861,150 @@ impl PersistenceRepository for GitPersistence {
     }
 
     fn refresh(&self) -> Result<crate::traits::RefreshResult, PersistenceError> {
-        let repo = &self
-            .repo
-            .lock()
-            .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
-
-        // Remember current HEAD so we can report whether it changed after the pull --rebase
-        let old_head = repo
-            .head()
-            .and_then(|h| {
-                h.target()
-                    .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
-            })
-            .map_err(|e| {
-                PersistenceError::RepositoryError(format!(
-                    "failed to read HEAD before refresh: {e}"
-                ))
+        let has_changes = {
+            let repo_guard = self.repo.lock().map_err(|e| {
+                PersistenceError::RepositoryError(format!("Can not lock repo: {e}"))
             })?;
+            let repo = &*repo_guard;
 
-        // --- "git pull" part: fetch origin/main (network) ---
-        {
-            let mut remote = repo.find_remote("origin").map_err(|e| {
-                PersistenceError::RepositoryError(format!("failed to find remote 'origin': {e}"))
-            })?;
+            log::info!("Starting repository refresh...");
 
-            let mut fo = git2::FetchOptions::new();
-            remote.fetch(&["main"], Some(&mut fo), None).map_err(|e| {
-                PersistenceError::RepositoryError(format!("failed to fetch origin/main: {e}"))
-            })?;
-        }
-
-        // Determine upstream after fetch
-        let upstream_ref = repo
-            .find_reference("refs/remotes/origin/main")
-            .map_err(|e| {
-                PersistenceError::RepositoryError(format!(
-                    "failed to find refs/remotes/origin/main after fetch: {e}"
-                ))
-            })?;
-        let upstream_annotated =
-            repo.reference_to_annotated_commit(&upstream_ref)
+            let old_head = repo
+                .head()
+                .and_then(|h| {
+                    h.target()
+                        .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
+                })
                 .map_err(|e| {
                     PersistenceError::RepositoryError(format!(
-                        "failed to create annotated commit for origin/main: {e}"
+                        "failed to read HEAD before refresh: {e}"
                     ))
                 })?;
 
-        // Signature for rebase commits
-        let sig = repo.signature().map_err(|e| {
-            PersistenceError::RepositoryError(format!("failed to get git signature: {e}"))
-        })?;
+            let private_key_path = get_private_key_path().map_err(|e| {
+                log::error!("Failed to resolve SSH key path: {e}");
+                PersistenceError::RepositoryError(format!("failed to get private key path: {e}"))
+            })?;
+            let private_key_path = private_key_path.to_owned();
 
-        // --- "git rebase origin/main" part ---
+            let mut callbacks = RemoteCallbacks::new();
+            callbacks.credentials(move |_url, username_from_url, _allowed_types| {
+                log::info!("Providing SSH credentials for git fetch");
+                Cred::ssh_key(
+                    username_from_url.unwrap_or("git"),
+                    None,
+                    &private_key_path,
+                    None,
+                )
+            });
 
-        let mut merge_opt = MergeOptions::new();
-        merge_opt.fail_on_conflict(true);
-        let mut rb = repo
-            .rebase(
-                None, // current branch/HEAD
-                Some(&upstream_annotated),
-                None, // no explicit onto
-                Some(&mut git2::RebaseOptions::new().merge_options(merge_opt)),
-            )
-            .map_err(|e| {
-                PersistenceError::RepositoryError(format!("failed to start rebase: {e}"))
+            let mut fetch_options = git2::FetchOptions::new();
+            fetch_options.remote_callbacks(callbacks);
+
+            let mut remote = repo.find_remote("origin").map_err(|e| {
+                log::error!("Unable to locate remote 'origin': {e}");
+                PersistenceError::RepositoryError(format!("failed to find remote 'origin': {e}"))
             })?;
 
-        rb.finish(Some(&sig)).map_err(|e| {
-            PersistenceError::RepositoryError(format!("failed to finish rebase: {e}"))
-        })?;
+            log::info!("Fetching origin/main...");
+            remote
+                .fetch(&["main"], Some(&mut fetch_options), None)
+                .map_err(|e| {
+                    log::error!("Fetch failed: {e}");
+                    PersistenceError::RepositoryError(format!("failed to fetch origin/main: {e}"))
+                })?;
 
-        // Update working tree to match the rebased HEAD
-        repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
-            .map_err(|e| {
-                PersistenceError::RepositoryError(format!(
-                    "failed to checkout HEAD after rebase: {e}"
-                ))
+            log::info!("Fetch complete; remote tracking branch updated");
+
+            let upstream_ref = repo
+                .find_reference("refs/remotes/origin/main")
+                .map_err(|e| {
+                    PersistenceError::RepositoryError(format!(
+                        "failed to find refs/remotes/origin/main after fetch: {e}"
+                    ))
+                })?;
+            let upstream_annotated =
+                repo.reference_to_annotated_commit(&upstream_ref)
+                    .map_err(|e| {
+                        log::error!("Failed to create annotated commit for origin/main: {e}");
+                        PersistenceError::RepositoryError(format!(
+                            "failed to create annotated commit for origin/main: {e}"
+                        ))
+                    })?;
+
+            let sig = repo.signature().map_err(|e| {
+                log::error!("Failed to resolve git signature: {e}");
+                PersistenceError::RepositoryError(format!("failed to get git signature: {e}"))
             })?;
 
-        let new_head = repo
-            .head()
-            .and_then(|h| {
-                h.target()
-                    .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
-            })
-            .map_err(|e| {
-                PersistenceError::RepositoryError(format!("failed to read HEAD after refresh: {e}"))
+            let mut merge_opt = MergeOptions::new();
+            merge_opt.fail_on_conflict(true);
+            let mut rb = repo
+                .rebase(
+                    None, // current branch/HEAD
+                    Some(&upstream_annotated),
+                    None, // no explicit onto
+                    Some(&mut git2::RebaseOptions::new().merge_options(merge_opt)),
+                )
+                .map_err(|e| {
+                    log::error!("Failed to start rebase: {e}");
+                    PersistenceError::RepositoryError(format!("failed to start rebase: {e}"))
+                })?;
+
+            let mut rebase_operations = 0usize;
+            while let Some(op) = rb.next().transpose().map_err(|e| {
+                log::error!("Rebase operation failed: {e}");
+                PersistenceError::RepositoryError(format!("rebase apply failed: {e}"))
+            })? {
+                rebase_operations += 1;
+                let oid = op.id();
+                log::info!("Applied rebase operation for commit {oid}");
+
+                if op.kind() != Some(RebaseOperationType::Exec) {
+                    rb.commit(None, &sig, None).map_err(|e| {
+                        log::error!("Failed to commit rebased change: {e}");
+                        PersistenceError::RepositoryError(format!(
+                            "failed to commit rebase step: {e}"
+                        ))
+                    })?;
+                } else {
+                    log::info!("Rebase operation was EXEC; skipping commit");
+                }
+            }
+
+            log::info!("Rebase applied {rebase_operations} operations; finalizing");
+
+            rb.finish(Some(&sig)).map_err(|e| {
+                log::error!("Failed to finish rebase: {e}");
+                PersistenceError::RepositoryError(format!("failed to finish rebase: {e}"))
             })?;
 
-        let has_changes = old_head != new_head;
+            repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+                .map_err(|e| {
+                    log::error!("Failed to checkout rebased HEAD: {e}");
+                    PersistenceError::RepositoryError(format!(
+                        "failed to checkout HEAD after rebase: {e}"
+                    ))
+                })?;
 
+            let new_head = repo
+                .head()
+                .and_then(|h| {
+                    h.target()
+                        .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
+                })
+                .map_err(|e| {
+                    PersistenceError::RepositoryError(format!(
+                        "failed to read HEAD after refresh: {e}"
+                    ))
+                })?;
+
+            old_head != new_head
+        };
+
+        log::info!("Refresh complete; rebuilding ledger map");
         self.build_ledger_map()?;
+        log::info!("Ledger map rebuild finished");
 
         Ok(crate::traits::RefreshResult { has_changes })
     }

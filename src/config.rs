@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use sysdirs::PathExt;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
+use sysdirs::PathExt;
 use uuid::Uuid;
 
 /// Application configuration

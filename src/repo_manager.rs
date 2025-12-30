@@ -26,11 +26,14 @@ impl RepoManager {
         }
 
         // Check if SSH keys exist
-        let private_key_path = get_private_key_path()
-            .map_err(|e| format!("Failed to get private key path: {}", e))?;
-        
+        let private_key_path =
+            get_private_key_path().map_err(|e| format!("Failed to get private key path: {}", e))?;
+
         if !private_key_path.exists() {
-            return Err(format!("SSH private key not found at {}", private_key_path.display()));
+            return Err(format!(
+                "SSH private key not found at {}",
+                private_key_path.display()
+            ));
         }
 
         // Set up SSH authentication
@@ -44,7 +47,7 @@ impl RepoManager {
                 None,
             )
         });
-        
+
         // Accept any host key (skip host key verification)
         callbacks.certificate_check(|_cert, _host| {
             log::info!("Accepting host certificate");
@@ -53,7 +56,11 @@ impl RepoManager {
 
         // Add transfer progress callback
         callbacks.transfer_progress(|stats| {
-            log::info!("Received {}/{} objects", stats.received_objects(), stats.total_objects());
+            log::info!(
+                "Received {}/{} objects",
+                stats.received_objects(),
+                stats.total_objects()
+            );
             true
         });
 
@@ -85,7 +92,7 @@ impl RepoManager {
         // Validate group.toml can be parsed
         let content = fs::read_to_string(&group_toml)
             .map_err(|e| format!("Failed to read group.toml: {}", e))?;
-        
+
         toml::from_str::<toml::Value>(&content)
             .map_err(|e| format!("Invalid group.toml format: {}", e))?;
 
@@ -105,8 +112,8 @@ impl RepoManager {
 
     /// Get the directory path for a repository based on URL hash
     fn get_repo_directory(url: &str) -> Result<PathBuf, String> {
-        let config_dir = get_config_dir()
-            .map_err(|e| format!("Failed to get config directory: {}", e))?;
+        let config_dir =
+            get_config_dir().map_err(|e| format!("Failed to get config directory: {}", e))?;
 
         let repos_dir = config_dir.join("repositories");
         fs::create_dir_all(&repos_dir)
@@ -124,16 +131,19 @@ impl RepoManager {
     /// Validate URL format (prevent file:// URLs and other potential security issues)
     fn validate_url(url: &str) -> Result<(), String> {
         let url_lower = url.to_lowercase();
-        
+
         if url_lower.starts_with("file://") {
             return Err("file:// URLs are not allowed".to_string());
         }
 
-        if !url_lower.starts_with("http://") 
+        if !url_lower.starts_with("http://")
             && !url_lower.starts_with("https://")
             && !url_lower.starts_with("git@")
-            && !url_lower.starts_with("ssh://") {
-            return Err("Invalid URL format. Must be http://, https://, git@, or ssh://".to_string());
+            && !url_lower.starts_with("ssh://")
+        {
+            return Err(
+                "Invalid URL format. Must be http://, https://, git@, or ssh://".to_string(),
+            );
         }
 
         if url.trim().is_empty() {

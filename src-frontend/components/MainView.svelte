@@ -82,7 +82,7 @@
   async function refreshAndReloadState() {
     try {
       const refreshResult = await invoke('refresh_data');
-      if (refreshResult.state_changed) {
+      if (refreshResult?.state_changed) {
         console.log('State changed detected, reloading app state...');
         await loadAppState();
       }
@@ -94,14 +94,14 @@
   async function handleExpenseSaved() {
     // Reload data after creating/updating expense
     await loadTransactions();
-    await refreshAndReloadState();
+    refreshAndReloadState();
     handleCloseView();
   }
 
   async function handleExpenseDeleted() {
     // Reload data after deleting expense
     await loadTransactions();
-    await refreshAndReloadState();
+    refreshAndReloadState();
     handleCloseView();
   }
 
@@ -116,7 +116,7 @@
     refreshInterval = setInterval(async () => {
       try {
         const refreshResult = await invoke('refresh_data');
-        if (refreshResult.state_changed) {
+        if (refreshResult?.state_changed) {
           console.log('State changed detected, reloading app state...');
           await loadAppState();
         }
