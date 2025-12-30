@@ -776,3 +776,239 @@ pub async fn import_config_qr(
 
     Ok(())
 }
+
+/// Get settlement information - who owes who with minimal payments
+#[tauri::command]
+pub fn get_settlement(state: tauri::State<AppState>) -> Result<SettlementResponse, String> {
+    let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
+    let group = state.group.lock().map_err(|e| e.to_string())?;
+    
+    let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
+    let group_ref = group.as_ref().ok_or("Not onboarded")?;
+    
+    // Build entity name map
+    let entity_names: std::collections::HashMap<Uuid, String> = group_ref
+        .entities
+        .iter()
+        .map(|e| (e.id, e.display_name.clone()))
+        .collect();
+    
+    // Calculate optimal settlement payments
+    let payments = crate::accounting::calculate_settlement_payments(transactions_ref, &entity_names);
+    
+    let settlement_payments: Vec<SettlementPayment> = payments
+        .into_iter()
+        .map(|(from, to, amount, currency)| SettlementPayment {
+            from_name: from,
+            to_name: to,
+            amount,
+            currency,
+        })
+        .collect();
+    
+    // Get all currencies
+    let currency_totals = crate::accounting::get_all_currencies(transactions_ref);
+    let currencies: Vec<CurrencyInfo> = currency_totals
+        .into_iter()
+        .map(|(code, total_amount)| CurrencyInfo {
+            code,
+            total_amount,
+        })
+        .collect();
+    
+    Ok(SettlementResponse {
+        payments: settlement_payments,
+        currencies,
+        total_converted: None,
+        target_currency: None,
+        converted_transactions: Vec::new(),
+    })
+}
+
+/// Convert settlement to a target currency with conversion rates
+#[tauri::command]
+pub async fn convert_settlement(
+    target_currency: String,
+    conversion_rates: Vec<CurrencyConversionInput>,
+    state: tauri::State<'_, AppState>,
+) -> Result<SettlementResponse, String> {
+    use std::collections::HashMap;
+    
+    // Clone the data we need before any async operations to avoid holding locks across await points
+    let (transactions_clone, entity_names) = {
+        let transactions = state.transactions.lock().map_err(|e| e.to_string())?;
+        let group = state.group.lock().map_err(|e| e.to_string())?;
+        
+        let transactions_ref = transactions.as_ref().ok_or("Not onboarded")?;
+        let group_ref = group.as_ref().ok_or("Not onboarded")?;
+        
+        let entity_names: HashMap<Uuid, String> = group_ref
+            .entities
+            .iter()
+            .map(|e| (e.id, e.display_name.clone()))
+            .collect();
+        
+        (transactions_ref.clone(), entity_names)
+    };
+    
+    // Build conversion rate map
+    let mut rate_map: HashMap<String, f64> = HashMap::new();
+    for rate_input in conversion_rates {
+        if let Some(fixed_rate) = rate_input.fixed_rate {
+            rate_map.insert(rate_input.currency_code.clone(), fixed_rate);
+        }
+    }
+    
+    // For currencies without fixed rates, fetch from API
+    let all_currencies = crate::accounting::get_all_currencies(&transactions_clone);
+    for (currency, _) in &all_currencies {
+        if currency != &target_currency && !rate_map.contains_key(currency) {
+            // Try to fetch rate from API
+            let rate = fetch_conversion_rate(currency, &target_currency).await
+                .unwrap_or(1.0); // Fallback to 1.0 if fetch fails
+            rate_map.insert(currency.clone(), rate);
+        }
+    }
+    
+    // Convert all transactions to target currency
+    let mut converted_transactions = Vec::new();
+    let mut converted_amounts: HashMap<Uuid, (f64, String)> = HashMap::new();
+    
+    for transaction in &transactions_clone {
+        let rate = if transaction.currency_iso_4217 == target_currency {
+            1.0
+        } else {
+            *rate_map.get(&transaction.currency_iso_4217).unwrap_or(&1.0)
+        };
+        
+        let converted_amount = transaction.amount * rate;
+        
+        converted_transactions.push(ConvertedTransaction {
+            description: transaction.description.clone(),
+            amount: transaction.amount,
+            original_currency: transaction.currency_iso_4217.clone(),
+            converted_amount,
+            target_currency: target_currency.clone(),
+            conversion_rate: rate,
+            date: transaction.transaction_datetime_rfc_3339.to_string(),
+        });
+        
+        // Track converted balances
+        let paid_by = transaction.paid_by_entity;
+        for split in &transaction.split_ratios {
+            let entity_id = split.entity_id;
+            let ratio = split.ratio.decimal_value();
+            let share = converted_amount * ratio;
+            
+            if entity_id == paid_by {
+                let net = converted_amount - share;
+                let entry = converted_amounts.entry(entity_id).or_insert((0.0, target_currency.clone()));
+                entry.0 += net;
+            } else {
+                let entry = converted_amounts.entry(entity_id).or_insert((0.0, target_currency.clone()));
+                entry.0 -= share;
+                
+                let payer_entry = converted_amounts.entry(paid_by).or_insert((0.0, target_currency.clone()));
+                payer_entry.0 += share;
+            }
+        }
+    }
+    
+    // Calculate settlement payments with converted amounts
+    let mut creditors: Vec<(Uuid, f64)> = Vec::new();
+    let mut debtors: Vec<(Uuid, f64)> = Vec::new();
+    let mut total_converted = 0.0;
+    
+    for (entity_id, (balance, _)) in converted_amounts {
+        total_converted += balance.abs();
+        if balance > 0.01 {
+            creditors.push((entity_id, balance));
+        } else if balance < -0.01 {
+            debtors.push((entity_id, -balance));
+        }
+    }
+    
+    let mut payments = Vec::new();
+    let mut creditor_idx = 0;
+    let mut debtor_idx = 0;
+    
+    while creditor_idx < creditors.len() && debtor_idx < debtors.len() {
+        let (creditor_id, mut creditor_amount) = creditors[creditor_idx];
+        let (debtor_id, mut debtor_amount) = debtors[debtor_idx];
+        
+        let payment_amount = creditor_amount.min(debtor_amount);
+        
+        let from_name = entity_names.get(&debtor_id)
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string());
+        let to_name = entity_names.get(&creditor_id)
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string());
+        
+        payments.push(SettlementPayment {
+            from_name,
+            to_name,
+            amount: payment_amount,
+            currency: target_currency.clone(),
+        });
+        
+        creditor_amount -= payment_amount;
+        debtor_amount -= payment_amount;
+        
+        if creditor_amount < 0.01 {
+            creditor_idx += 1;
+        } else {
+            creditors[creditor_idx].1 = creditor_amount;
+        }
+        
+        if debtor_amount < 0.01 {
+            debtor_idx += 1;
+        } else {
+            debtors[debtor_idx].1 = debtor_amount;
+        }
+    }
+    
+    let currencies: Vec<CurrencyInfo> = all_currencies
+        .into_iter()
+        .map(|(code, total_amount)| CurrencyInfo {
+            code,
+            total_amount,
+        })
+        .collect();
+    
+    Ok(SettlementResponse {
+        payments,
+        currencies,
+        total_converted: Some(total_converted / 2.0), // Divide by 2 because we counted both sides
+        target_currency: Some(target_currency),
+        converted_transactions,
+    })
+}
+
+/// Fetch currency conversion rate from an external API
+/// This is a simplified version - in production, use a proper API like exchangerate-api.com
+async fn fetch_conversion_rate(from_currency: &str, to_currency: &str) -> Result<f64, String> {
+    // Using exchangerate-api.com free tier (no auth needed for basic usage)
+    let url = format!(
+        "https://api.exchangerate-api.com/v4/latest/{}",
+        from_currency
+    );
+    
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch exchange rate: {}", e))?;
+    
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse exchange rate response: {}", e))?;
+    
+    let rate = data["rates"][to_currency]
+        .as_f64()
+        .ok_or_else(|| format!("Rate not found for {}", to_currency))?;
+    
+    Ok(rate)
+}

@@ -88,6 +88,113 @@ pub fn get_primary_currency(transactions: &[Transaction]) -> String {
         .unwrap_or_else(|| String::from("USD"))
 }
 
+/// Calculate optimal settlement payments to minimize number of transactions
+///
+/// This function takes all the debts between people and calculates the minimum
+/// number of payments needed to settle all debts.
+///
+/// Algorithm:
+/// 1. Calculate net balance for each person (positive = owed money, negative = owes money)
+/// 2. Match creditors with debtors optimally
+/// 3. Return list of payments that settle all debts
+pub fn calculate_settlement_payments(
+    transactions: &[Transaction],
+    entity_names: &HashMap<Uuid, String>,
+) -> Vec<(String, String, f64, String)> {
+    // Calculate net balance for each entity across all transactions
+    let mut net_balances: HashMap<Uuid, (f64, String)> = HashMap::new();
+    
+    for transaction in transactions {
+        let amount = transaction.amount;
+        let paid_by = transaction.paid_by_entity;
+        let currency = &transaction.currency_iso_4217;
+        
+        for split in &transaction.split_ratios {
+            let entity_id = split.entity_id;
+            let ratio = split.ratio.decimal_value();
+            let share = amount * ratio;
+            
+            if entity_id == paid_by {
+                // Entity paid, so they are owed (amount - their share)
+                let net = amount - share;
+                let entry = net_balances.entry(entity_id).or_insert((0.0, currency.clone()));
+                entry.0 += net;
+            } else {
+                // Entity owes their share to the payer
+                let entry = net_balances.entry(entity_id).or_insert((0.0, currency.clone()));
+                entry.0 -= share;
+                
+                let payer_entry = net_balances.entry(paid_by).or_insert((0.0, currency.clone()));
+                payer_entry.0 += share;
+            }
+        }
+    }
+    
+    // Separate into creditors (owed money) and debtors (owe money)
+    let mut creditors: Vec<(Uuid, f64, String)> = Vec::new();
+    let mut debtors: Vec<(Uuid, f64, String)> = Vec::new();
+    
+    for (entity_id, (balance, currency)) in net_balances {
+        if balance > 0.01 {
+            creditors.push((entity_id, balance, currency));
+        } else if balance < -0.01 {
+            debtors.push((entity_id, -balance, currency));
+        }
+    }
+    
+    // Calculate optimal payments
+    let mut payments = Vec::new();
+    let mut creditor_idx = 0;
+    let mut debtor_idx = 0;
+    
+    while creditor_idx < creditors.len() && debtor_idx < debtors.len() {
+        let (creditor_id, mut creditor_amount, creditor_currency) = creditors[creditor_idx].clone();
+        let (debtor_id, mut debtor_amount, _debtor_currency) = debtors[debtor_idx].clone();
+        
+        let payment_amount = creditor_amount.min(debtor_amount);
+        
+        let from_name = entity_names.get(&debtor_id)
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string());
+        let to_name = entity_names.get(&creditor_id)
+            .cloned()
+            .unwrap_or_else(|| "Unknown".to_string());
+        
+        payments.push((from_name, to_name, payment_amount, creditor_currency.clone()));
+        
+        creditor_amount -= payment_amount;
+        debtor_amount -= payment_amount;
+        
+        if creditor_amount < 0.01 {
+            creditor_idx += 1;
+        } else {
+            creditors[creditor_idx].1 = creditor_amount;
+        }
+        
+        if debtor_amount < 0.01 {
+            debtor_idx += 1;
+        } else {
+            debtors[debtor_idx].1 = debtor_amount;
+        }
+    }
+    
+    payments
+}
+
+/// Get all unique currencies used in transactions
+pub fn get_all_currencies(transactions: &[Transaction]) -> HashMap<String, f64> {
+    let mut currency_totals: HashMap<String, f64> = HashMap::new();
+    
+    for transaction in transactions {
+        let currency = transaction.currency_iso_4217.clone();
+        *currency_totals.entry(currency).or_insert(0.0) += transaction.amount;
+    }
+    
+    currency_totals
+}
+
+
+
 #[cfg(test)]
 mod tests {
     use crate::structs::{Split, SplitType};

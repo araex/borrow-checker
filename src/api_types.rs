@@ -104,3 +104,43 @@ pub struct ConfigExportData {
     pub private_key: String,
     pub public_key: String,
 }
+
+#[derive(Serialize)]
+pub struct SettlementPayment {
+    pub from_name: String,
+    pub to_name: String,
+    pub amount: f64,
+    pub currency: String,
+}
+
+#[derive(Serialize)]
+pub struct CurrencyInfo {
+    pub code: String,
+    pub total_amount: f64,
+}
+
+#[derive(Serialize)]
+pub struct ConvertedTransaction {
+    pub description: String,
+    pub amount: f64,
+    pub original_currency: String,
+    pub converted_amount: f64,
+    pub target_currency: String,
+    pub conversion_rate: f64,
+    pub date: String,
+}
+
+#[derive(Serialize)]
+pub struct SettlementResponse {
+    pub payments: Vec<SettlementPayment>,
+    pub currencies: Vec<CurrencyInfo>,
+    pub total_converted: Option<f64>,
+    pub target_currency: Option<String>,
+    pub converted_transactions: Vec<ConvertedTransaction>,
+}
+
+#[derive(Deserialize)]
+pub struct CurrencyConversionInput {
+    pub currency_code: String,
+    pub fixed_rate: Option<f64>,
+}

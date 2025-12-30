@@ -77,6 +77,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(app_state);
 
     if let Some(persistence) = persistence_instance {
@@ -103,6 +104,8 @@ pub fn run() {
             api_commands::reset_user,
             api_commands::export_config_qr,
             api_commands::import_config_qr,
+            api_commands::get_settlement,
+            api_commands::convert_settlement,
         ])
         .setup(|_app| {
             log::info!("Tauri application setup complete - logging is now active");

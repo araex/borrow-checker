@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { ask } from '@tauri-apps/plugin-dialog';
 
   let { 
     expenseId = null,  // null for new expense, string for edit
@@ -192,20 +193,32 @@
   }
 
   async function handleDelete() {
-    if (!expenseId) return;
+    console.log('handleDelete called, expenseId:', expenseId);
+    if (!expenseId) {
+      console.log('No expenseId, returning early');
+      return;
+    }
     
-    if (!confirm('Are you sure you want to delete this expense?')) {
+    const confirmed = await ask('Are you sure you want to delete this expense?', {
+      title: 'Delete Expense',
+      kind: 'warning'
+    });
+    
+    if (!confirmed) {
+      console.log('User cancelled delete confirmation');
       return;
     }
     
     try {
       saving = true;
       error = '';
+      console.log('Calling delete_expense with expenseId:', expenseId);
       await invoke('delete_expense', { expenseId });
+      console.log('Delete successful, calling onDeleted');
       onDeleted();
     } catch (e) {
       error = `Failed to delete expense: ${e}`;
-      console.error(error);
+      console.error('Delete error:', error, e);
     } finally {
       saving = false;
     }
@@ -387,7 +400,7 @@
         {#if expenseId}
           <button
             type="button"
-            onclick={handleDelete}
+            onclick={() => handleDelete()}
             disabled={saving}
             class="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-semibold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
