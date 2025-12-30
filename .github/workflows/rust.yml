@@ -2,8 +2,7 @@ name: Rust
 
 on:
   push:
-    - branches: [ "main" ]
-    - branches: [ "gh_action" ]
+    branches: [ "main", "gh_action" ]
   pull_request:
     branches: [ "main" ]
 
