@@ -2,8 +2,8 @@ use crate::ssh_keys::get_private_key_path;
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{
-    Cred, MergeOptions, ObjectType, Oid, PushOptions, RebaseOperationType, RemoteCallbacks,
-    Repository, Tree,
+    Cred, FileFavor, MergeOptions, ObjectType, Oid, PushOptions, RebaseOperationType,
+    RemoteCallbacks, Repository, Tree,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -937,7 +937,8 @@ impl PersistenceRepository for GitPersistence {
                 })?;
 
                 let mut merge_opt = MergeOptions::new();
-                merge_opt.fail_on_conflict(true);
+                merge_opt.fail_on_conflict(false);
+                merge_opt.file_favor(FileFavor::Theirs);
                 let mut rb = repo
                     .rebase(
                         None,
