@@ -37,6 +37,7 @@ tauri-plugin-macos-permissions = "2.3.0"
 
 [dev-dependencies]
 test-context = "0.5"
+tempfile = "3"
 
 [lints.clippy]
 unwrap_used = "warn"

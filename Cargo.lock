@@ -491,6 +491,7 @@ dependencies = [
  "tauri-plugin-macos-permissions",
  "tauri-plugin-opener",
  "tauri-plugin-os",
+ "tempfile",
  "test-context",
  "toml 0.9.10+spec-1.1.0",
  "uuid",

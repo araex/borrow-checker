@@ -1125,3 +1125,188 @@ impl PersistenceRepository for GitPersistence {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::structs::{Ledger, Split, SplitType, Transaction};
+    use git2::{IndexAddOption, Repository, Signature};
+    use rational::Rational;
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::Path;
+    use std::str::FromStr;
+    use tempfile::TempDir;
+    use toml::value::Datetime;
+    use uuid::Uuid;
+
+    struct GitRepoFixture {
+        temp_dir: TempDir,
+        persistence: GitPersistence,
+    }
+
+    impl GitRepoFixture {
+        fn new(
+            committed_ledgers: &[Ledger],
+            committed_transactions: &[(Uuid, Transaction)],
+            local_ledgers: &[Ledger],
+            local_transactions: &[(Uuid, Transaction)],
+        ) -> Self {
+            let temp_dir = TempDir::new().expect("create temp dir");
+            let repo = Repository::init(temp_dir.path()).expect("init repo");
+
+            {
+                let mut cfg = repo.config().expect("repo config");
+                cfg.set_str("user.name", "Test User").expect("set user.name");
+                cfg.set_str("user.email", "test@example.com").expect("set user.email");
+            }
+
+            let mut ledger_dirs: HashMap<Uuid, String> = HashMap::new();
+            for ledger in committed_ledgers.iter().chain(local_ledgers.iter()) {
+                ledger_dirs.insert(ledger.id, ledger.display_name.clone());
+            }
+
+            write_ledgers(temp_dir.path(), committed_ledgers);
+            write_transactions(temp_dir.path(), committed_transactions, &ledger_dirs);
+
+            let first_commit = commit_worktree(&repo, "seed committed state");
+            repo.set_head("refs/heads/main").expect("set head main");
+            repo.reference(
+                "refs/remotes/origin/main",
+                first_commit,
+                true,
+                "seed origin",
+            )
+            .expect("set origin main");
+
+            if !local_ledgers.is_empty() || !local_transactions.is_empty() {
+                write_ledgers(temp_dir.path(), local_ledgers);
+                write_transactions(temp_dir.path(), local_transactions, &ledger_dirs);
+                commit_worktree(&repo, "only local state");
+            }
+
+            drop(repo);
+
+            let persistence =
+                GitPersistence::new(temp_dir.path().to_path_buf()).expect("create persistence");
+
+            GitRepoFixture {
+                temp_dir,
+                persistence,
+            }
+        }
+
+        fn persistence(&self) -> &GitPersistence {
+            &self.persistence
+        }
+    }
+
+    fn write_ledgers(base: &Path, ledgers: &[Ledger]) {
+        for ledger in ledgers {
+            let ledger_dir = base.join("ledgers").join(&ledger.display_name);
+            fs::create_dir_all(&ledger_dir).expect("create ledger dir");
+            let marker_path = ledger_dir.join(".ledger.toml");
+            let content = toml::to_string_pretty(ledger).expect("ledger to toml");
+            fs::write(marker_path, content).expect("write ledger file");
+        }
+    }
+
+    fn write_transactions(
+        base: &Path,
+        transactions: &[(Uuid, Transaction)],
+        ledger_dirs: &HashMap<Uuid, String>,
+    ) {
+        for (ledger_id, tx) in transactions {
+            let folder = ledger_dirs
+                .get(ledger_id)
+                .expect("missing ledger folder for transaction");
+            let dir = base.join("ledgers").join(folder);
+            fs::create_dir_all(&dir).expect("create transaction dir");
+            let file_path = dir.join(format!("{}.toml", tx.id));
+            let content = toml::to_string_pretty(tx).expect("transaction to toml");
+            fs::write(file_path, content).expect("write transaction file");
+        }
+    }
+
+    fn commit_worktree(repo: &Repository, message: &str) -> Oid {
+        let sig = Signature::now("Test User", "test@example.com").expect("sig");
+        let mut index = repo.index().expect("repo index");
+        index
+            .add_all(["ledgers"], IndexAddOption::DEFAULT, None)
+            .expect("stage ledgers");
+        index.write().expect("write index");
+        let tree_oid = index.write_tree().expect("write tree");
+        let tree = repo.find_tree(tree_oid).expect("find tree");
+
+        if let Ok(head) = repo.head() {
+            if let Some(oid) = head.target() {
+                let parent = repo.find_commit(oid).expect("find parent");
+                return repo
+                    .commit(Some("refs/heads/main"), &sig, &sig, message, &tree, &[&parent])
+                    .expect("create commit");
+            }
+        }
+
+        repo.commit(Some("refs/heads/main"), &sig, &sig, message, &tree, &[])
+            .expect("create initial commit")
+    }
+
+    fn sample_transaction(payer: Uuid, description: &str, amount: f64) -> Transaction {
+        Transaction {
+            id: Uuid::new_v4(),
+            description: description.to_string(),
+            paid_by_entity: payer,
+            currency_iso_4217: "EUR".to_string(),
+            amount,
+            transaction_datetime_rfc_3339: Datetime::from_str("2024-01-01T00:00:00Z")
+                .expect("datetime"),
+            split_ratios: vec![Split {
+                entity_id: payer,
+                ratio: Rational::new(1, 1),
+                split_type: SplitType::Ratio(Rational::new(1, 1)),
+            }],
+        }
+    }
+
+    #[test]
+    fn create_transaction_roundtrip() {
+        let participant = Uuid::new_v4();
+        let ledger = Ledger {
+            id: Uuid::new_v4(),
+            display_name: "ledger".to_string(),
+            participants: vec![participant],
+        };
+
+        let seed_tx = sample_transaction(participant, "Seed expense", 42.0);
+        let committed_transactions = vec![(ledger.id, seed_tx.clone())];
+
+        let fixture = GitRepoFixture::new(&[ledger.clone()], &committed_transactions, &[], &[]);
+        let persistence = fixture.persistence();
+
+        let ledgers = persistence.list_ledgers().expect("list ledgers");
+        assert_eq!(ledgers.len(), 1);
+        assert_eq!(ledgers[0].id, ledger.id);
+
+        let new_tx = sample_transaction(participant, "New expense", 99.5);
+        let created_id =
+            persistence
+                .create_transaction(ledger.id, new_tx.clone())
+                .expect("create transaction");
+        assert_eq!(created_id, new_tx.id);
+
+        let mut transactions =
+            persistence.list_transactions(ledger.id).expect("list transactions");
+        transactions.sort_by(|a, b| a.id.cmp(&b.id));
+
+        assert_eq!(transactions.len(), 2);
+        assert!(transactions.iter().any(|tx| tx.id == seed_tx.id));
+        let saved = transactions
+            .iter()
+            .find(|tx| tx.id == new_tx.id)
+            .expect("find new transaction");
+
+        assert_eq!(saved.description, new_tx.description);
+        assert_eq!(saved.amount, new_tx.amount);
+        assert_eq!(saved.paid_by_entity, new_tx.paid_by_entity);
+    }
+}
