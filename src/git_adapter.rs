@@ -890,14 +890,26 @@ impl PersistenceRepository for GitPersistence {
 
             let fetch_key_path = private_key_path.clone();
             let mut callbacks = RemoteCallbacks::new();
-            callbacks.credentials(move |_url, username_from_url, _allowed_types| {
-                log::info!("Providing SSH credentials for git fetch");
-                Cred::ssh_key(
-                    username_from_url.unwrap_or("git"),
-                    None,
-                    &fetch_key_path,
-                    None,
-                )
+            callbacks.credentials(move |url, username_from_url, allowed_types| {
+                log::info!("Credentials requested for fetch from URL: {}", url);
+                log::info!("Allowed credential types: {:?}", allowed_types);
+                
+                // Check if SSH key authentication is allowed
+                if allowed_types.contains(git2::CredentialType::SSH_KEY) {
+                    log::info!("Providing SSH credentials for git fetch");
+                    Cred::ssh_key(
+                        username_from_url.unwrap_or("git"),
+                        None,
+                        &fetch_key_path,
+                        None,
+                    )
+                } else if allowed_types.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+                    log::info!("Attempting default git credentials for HTTPS");
+                    Cred::credential_helper(&git2::Config::open_default().ok().unwrap(), url, username_from_url)
+                } else {
+                    log::error!("No supported credential type available");
+                    Err(git2::Error::from_str("No supported credential type"))
+                }
             });
 
             let mut fetch_options = git2::FetchOptions::new();
@@ -1006,21 +1018,6 @@ impl PersistenceRepository for GitPersistence {
             if Self::repo_has_local_changes(repo)? {
                 log::info!("Local repository has commits not on origin/main; pushing");
 
-                let push_key_path = private_key_path.clone();
-                let mut push_callbacks = RemoteCallbacks::new();
-                push_callbacks.credentials(move |_url, username_from_url, _allowed_types| {
-                    log::info!("Providing SSH credentials for git push");
-                    Cred::ssh_key(
-                        username_from_url.unwrap_or("git"),
-                        None,
-                        &push_key_path,
-                        None,
-                    )
-                });
-
-                let mut push_options = PushOptions::new();
-                push_options.remote_callbacks(push_callbacks);
-
                 let branch_ref = match head_ref_name_opt {
                     Some(name) => name,
                     None => {
@@ -1032,6 +1029,34 @@ impl PersistenceRepository for GitPersistence {
                 };
 
                 let refspec = format!("{branch_ref}:{branch_ref}");
+                
+                let push_key_path = private_key_path.clone();
+                let mut push_callbacks = RemoteCallbacks::new();
+                push_callbacks.credentials(move |url, username_from_url, allowed_types| {
+                    log::info!("Credentials requested for push to URL: {}", url);
+                    log::info!("Allowed credential types: {:?}", allowed_types);
+                    
+                    // Check if SSH key authentication is allowed
+                    if allowed_types.contains(git2::CredentialType::SSH_KEY) {
+                        log::info!("Providing SSH credentials for git push");
+                        Cred::ssh_key(
+                            username_from_url.unwrap_or("git"),
+                            None,
+                            &push_key_path,
+                            None,
+                        )
+                    } else if allowed_types.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
+                        log::info!("Attempting default git credentials for HTTPS");
+                        Cred::credential_helper(&git2::Config::open_default().ok().unwrap(), url, username_from_url)
+                    } else {
+                        log::error!("No supported credential type available");
+                        Err(git2::Error::from_str("No supported credential type"))
+                    }
+                });
+
+                let mut push_options = PushOptions::new();
+                push_options.remote_callbacks(push_callbacks);
+
                 let mut remote = repo.find_remote("origin").map_err(|e| {
                     log::error!("Unable to locate remote 'origin' for push: {e}");
                     PersistenceError::RepositoryError(format!(
