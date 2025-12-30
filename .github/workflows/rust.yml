@@ -16,6 +16,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - uses: oven-sh/setup-bun@v2
     - name: Restore cache
       uses: actions/cache@v5
       with:
@@ -23,8 +24,6 @@ jobs:
         key: Cargo.lock
     - name: Install Tauri
       run: cargo install tauri-cli --version "^2.0" --locked
-    - name: Install Bun
-      run: curl -fsSL https://bun.com/install | bash
     - name: Build
       run: cargo tauri build
     - name: Run tests
