@@ -649,12 +649,15 @@ pub async fn refresh_data(
         .map_err(|e| format!("Failed to refresh data: {}", e))?;
 
     log::info!(
-        "Data refresh completed, has_changes: {}",
-        result.has_changes
+        "Data refresh completed, remote_changed: {}, pushed: {}",
+        result.remote_changed,
+        result.pushed
     );
 
     Ok(RefreshDataResponse {
-        state_changed: result.has_changes,
+        state_changed: result.remote_changed,
+        remote_changed: result.remote_changed,
+        pushed: result.pushed,
     })
 }
 

@@ -77,8 +77,10 @@ impl From<git2::Error> for PersistenceError {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct RefreshResult {
-    /// Whether anything has changed in the remote storage
-    pub has_changes: bool,
+    /// True when origin/main advanced and we rebased local commits
+    pub remote_changed: bool,
+    /// True when we pushed commits to origin/main during refresh
+    pub pushed: bool,
 }
 
 /// Shared persistence handle used across async boundaries
