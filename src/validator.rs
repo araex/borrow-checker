@@ -409,7 +409,7 @@ pub fn validate_split_ratios_sum(ratios: &[Split]) -> Result<(), ValidationError
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::structs::Entity;
+    use crate::structs::{Entity, SplitType};
     use toml::value::Datetime;
 
     fn create_test_group() -> Group {
