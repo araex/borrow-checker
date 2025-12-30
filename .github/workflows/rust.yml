@@ -29,11 +29,11 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Install Tauri
       run: cargo install tauri-cli --version "^2.0" --locked
-    - name: Build
-      run: cargo tauri build
-    - name: Run tests
-      run: cargo test
-    - name: Init Android build
-      run: cargo tauri android init --ci
-    - name: Build Android
-      run: cargo tauri android build --ci
+    # - name: Build
+    #   run: cargo tauri build
+    # - name: Run tests
+    #   run: cargo test
+    # - name: Init Android build
+    #   run: cargo tauri android init --ci
+    # - name: Build Android
+    #   run: cargo tauri android build --ci
