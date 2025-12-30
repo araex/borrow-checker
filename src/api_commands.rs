@@ -50,7 +50,10 @@ pub async fn join_group(
 
     let group = persistence
         .load_group()
-        .map_err(|e| format!("Failed to load group: {}", e))?;
+        .map_err(|e| format!("Failed to load group: {}", e))?
+        .unwrap_or_else(|| crate::structs::Group {
+            entities: Vec::new(),
+        });
 
     let ledgers = persistence
         .list_ledgers()
@@ -741,7 +744,8 @@ pub async fn import_config_qr(
 
     let group = persistence
         .load_group()
-        .map_err(|e| format!("Failed to load group: {}", e))?;
+        .map_err(|e| format!("Failed to load group: {}", e))?
+        .ok_or_else(|| "Group configuration not found. Initialize the repository first.".to_string())?;
 
     let ledgers = persistence
         .list_ledgers()

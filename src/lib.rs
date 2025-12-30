@@ -34,7 +34,7 @@ pub fn run() {
 
             let persistence: SharedPersistence =
                 Arc::new(GitPersistence::new(repo_path.clone()).unwrap());
-            let group = persistence.load_group().unwrap();
+            let group = persistence.load_group().unwrap().expect("Group configuration should exist in onboarded repository");
             let ledgers = persistence.list_ledgers().unwrap();
 
             // Use first ledger as default

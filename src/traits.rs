@@ -101,7 +101,8 @@ pub trait PersistenceRepository {
     // ------------------------------------------------------------------------
 
     /// Load the group configuration containing all entities
-    fn load_group(&self) -> Result<Group, PersistenceError>;
+    /// Returns None if group.toml does not exist (e.g., in a new repository)
+    fn load_group(&self) -> Result<Option<Group>, PersistenceError>;
 
     /// Persist group configuration changes (including all entities)
     fn save_group(&self, group: &Group) -> Result<(), PersistenceError>;

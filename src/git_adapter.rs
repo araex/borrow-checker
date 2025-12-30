@@ -222,16 +222,20 @@ impl GitPersistence {
 impl PersistenceRepository for GitPersistence {
     // ---------------- Group Operations ----------------
 
-    fn load_group(&self) -> Result<structs::Group, PersistenceError> {
+    fn load_group(&self) -> Result<Option<structs::Group>, PersistenceError> {
         let repo = &self
             .repo
             .lock()
             .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
 
-        let text = read_blob_text(repo, Path::new("group.toml"))?;
+        let text = match read_blob_text(repo, Path::new("group.toml")) {
+            Ok(text) => text,
+            Err(PersistenceError::NotFound(_)) => return Ok(None),
+            Err(e) => return Err(e),
+        };
         let group: structs::Group = toml::from_str(&text)
             .map_err(|e| PersistenceError::DataError(format!("TOML parse error: {}", e)))?;
-        Ok(group)
+        Ok(Some(group))
     }
 
     fn save_group(&self, group: &structs::Group) -> Result<(), PersistenceError> {
