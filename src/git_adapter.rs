@@ -2,14 +2,15 @@ use crate::ssh_keys::get_private_key_path;
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{
-    Cred, FileFavor, MergeOptions, ObjectType, Oid, PushOptions, RebaseOperationType,
-    RemoteCallbacks, Repository, Tree,
+    Cred, ErrorClass, ErrorCode, FileFavor, MergeOptions, ObjectType, Oid, Progress,
+    PushOptions, RebaseOperationType, RemoteCallbacks, Repository, Tree,
 };
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str;
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 /// Git-backed implementation of PersistenceRepository.
@@ -188,6 +189,8 @@ fn get_origin_main_oid(repo: &Repository) -> Result<Oid, PersistenceError> {
             ))
         })
 }
+
+const GIT_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl GitPersistence {
     /// Open a repository at the given path.
@@ -890,6 +893,20 @@ impl PersistenceRepository for GitPersistence {
                 }
             });
 
+            let fetch_start = Instant::now();
+            let fetch_timeout = GIT_OPERATION_TIMEOUT;
+            callbacks.transfer_progress(move |_progress| -> bool {
+                if fetch_start.elapsed() > fetch_timeout {
+                    log::error!(
+                        "Git fetch exceeded {:?}; aborting operation",
+                        fetch_timeout
+                    );
+                    false
+                } else {
+                    true
+                }
+            });
+
             let mut fetch_options = git2::FetchOptions::new();
             fetch_options.remote_callbacks(callbacks);
 
@@ -961,12 +978,20 @@ impl PersistenceRepository for GitPersistence {
                     log::info!("Applied rebase operation for commit {oid}");
 
                     if op.kind() != Some(RebaseOperationType::Exec) {
-                        rb.commit(None, &sig, None).map_err(|e| {
-                            log::error!("Failed to commit rebased change: {e}");
-                            PersistenceError::RepositoryError(format!(
-                                "failed to commit rebase step: {e}"
-                            ))
-                        })?;
+                        match rb.commit(None, &sig, None) {
+                            Ok(_) => {}
+                            Err(e) if e.class() == ErrorClass::Rebase && e.code() == ErrorCode::Applied => {
+                                log::warn!(
+                                    "Skipping commit for already-applied patch during rebase: {e}"
+                                );
+                            }
+                            Err(e) => {
+                                log::error!("Failed to commit rebased change: {e}");
+                                return Err(PersistenceError::RepositoryError(format!(
+                                    "failed to commit rebase step: {e}"
+                                )));
+                            }
+                        }
                     } else {
                         log::info!("Rebase operation was EXEC; skipping commit");
                     }
@@ -1042,6 +1067,24 @@ impl PersistenceRepository for GitPersistence {
                     } else {
                         log::error!("No supported credential type available");
                         Err(git2::Error::from_str("No supported credential type"))
+                    }
+                });
+
+                let push_start = Instant::now();
+                let push_timeout = GIT_OPERATION_TIMEOUT;
+                log::info!(
+                    "Enforcing {:?} timeout on git push via transfer_progress callback",
+                    push_timeout
+                );
+                push_callbacks.transfer_progress(move |_progress: Progress<'_>| -> bool {
+                    if push_start.elapsed() > push_timeout {
+                        log::error!(
+                            "Git push exceeded {:?}; aborting operation",
+                            push_timeout
+                        );
+                        false
+                    } else {
+                        true
                     }
                 });
 
