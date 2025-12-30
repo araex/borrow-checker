@@ -13,7 +13,7 @@
 >
     <div class="title-group">
         <span class="font-mono text-xs text-orange-500 uppercase tracking-wide"
-            >LEDGER !?</span
+            >LEDGER</span
         >
         <div class="flex items-center gap-2">
             <select
@@ -50,26 +50,19 @@
         {:else}
             <div class="space-y-2">
                 {#each balances as balance}
-                    <div class="flex items-center justify-end gap-3">
-                        <span class="text-sm text-gray-400"
-                            >{balance.user_name}</span
-                        >
-                        {#if balance.amount < 0}
-                            <span class="font-mono text-lg text-red-500">
-                                -{currency}
-                                {Math.abs(balance.amount).toFixed(2)}
-                            </span>
-                        {:else if balance.amount > 0}
-                            <span class="font-mono text-lg text-green-400">
-                                {currency}
-                                {balance.amount.toFixed(2)}
-                            </span>
-                        {:else}
-                            <span class="font-mono text-lg text-gray-600">
-                                {currency} 0.00
-                            </span>
-                        {/if}
-                    </div>
+                    {#if balance.amount < 0}
+                        <div class="text-sm text-gray-300">
+                            you owe {balance.user_name} <span class="text-red-500">{currency} {Math.abs(balance.amount).toFixed(2)}</span>
+                        </div>
+                    {:else if balance.amount > 0}
+                        <div class="text-sm text-gray-300">
+                            {balance.user_name} owes you <span class="text-green-400">{currency} {balance.amount.toFixed(2)}</span>
+                        </div>
+                    {:else}
+                        <div class="text-sm text-gray-600">
+                            settled with {balance.user_name}
+                        </div>
+                    {/if}
                 {/each}
             </div>
         {/if}

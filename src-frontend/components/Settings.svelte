@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import QRCodeModal from './QRCodeModal.svelte';
 
@@ -13,9 +13,20 @@
   let qrSvgContent = $state('');
   let exportingQR = $state(false);
 
+  function handleKeyDown(event) {
+    if (event.key === 'Escape' && !showQRModal) {
+      onClose();
+    }
+  }
+
   onMount(async () => {
     console.log('Settings component mounted');
     await loadSettings();
+    window.addEventListener('keydown', handleKeyDown);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('keydown', handleKeyDown);
   });
 
   async function loadSettings() {

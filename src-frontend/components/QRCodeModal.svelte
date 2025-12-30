@@ -1,5 +1,21 @@
 <script>
+  import { onMount, onDestroy } from 'svelte';
+
   let { isOpen, onClose, svgContent } = $props();
+
+  function handleKeyDown(event) {
+    if (event.key === 'Escape' && isOpen) {
+      onClose();
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('keydown', handleKeyDown);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('keydown', handleKeyDown);
+  });
 </script>
 
 {#if isOpen}

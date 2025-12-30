@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
 
   let { 
@@ -22,8 +22,19 @@
   let participants = $state([]);
   let splitConfig = $state({}); // { entityId: { included: bool, numerator: number, denominator: number } }
 
+  function handleKeyDown(event) {
+    if (event.key === 'Escape') {
+      onClose();
+    }
+  }
+
   onMount(async () => {
     await loadFormData();
+    window.addEventListener('keydown', handleKeyDown);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('keydown', handleKeyDown);
   });
 
   async function loadFormData() {

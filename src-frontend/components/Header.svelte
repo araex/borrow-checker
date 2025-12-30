@@ -15,19 +15,6 @@
   
   {#if currentUserName}
     <div class="flex items-center gap-6">
-      {#if groupMembers.length > 0}
-        <div class="flex items-center gap-3">
-          <span class="text-xs text-gray-500 uppercase">Group:</span>
-          <div class="flex gap-2">
-            {#each groupMembers as member}
-              <span class="px-2 py-1 bg-zinc-800 border border-zinc-700 rounded text-xs text-zinc-300">
-                {member}
-              </span>
-            {/each}
-          </div>
-        </div>
-      {/if}
-      
       <div class="flex items-center gap-2">
         <span class="text-xs text-gray-500 uppercase">Logged in as:</span>
         <span class="text-orange-400 font-semibold text-sm">{currentUserName}</span>
