@@ -2,7 +2,8 @@ use crate::ssh_keys::get_private_key_path;
 use crate::structs;
 use crate::traits::{PersistenceError, PersistenceRepository};
 use git2::{
-    Cred, MergeOptions, ObjectType, RebaseOperationType, RemoteCallbacks, Repository, Tree,
+    Cred, MergeOptions, ObjectType, PushOptions, RebaseOperationType, RemoteCallbacks, Repository,
+    Tree,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -202,6 +203,36 @@ impl GitPersistence {
         })?;
 
         Ok(())
+    }
+
+    fn repo_has_local_changes(repo: &Repository) -> Result<bool, PersistenceError> {
+        let local_main = repo
+            .find_reference("refs/heads/main")
+            .and_then(|r| {
+                r.target()
+                    .ok_or_else(|| git2::Error::from_str("main has no target"))
+            })
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!(
+                    "failed to resolve refs/heads/main: {}",
+                    e
+                ))
+            })?;
+
+        let origin_main = repo
+            .find_reference("refs/remotes/origin/main")
+            .and_then(|r| {
+                r.target()
+                    .ok_or_else(|| git2::Error::from_str("origin/main has no target"))
+            })
+            .map_err(|e| {
+                PersistenceError::RepositoryError(format!(
+                    "failed to resolve refs/remotes/origin/main: {}",
+                    e
+                ))
+            })?;
+
+        Ok(local_main != origin_main)
     }
 }
 
@@ -827,37 +858,7 @@ impl PersistenceRepository for GitPersistence {
             .repo
             .lock()
             .map_err(|e| PersistenceError::RepositoryError(format!("Can not lock repo: {e}")))?;
-
-        // Resolve local main
-        let local_main = repo
-            .find_reference("refs/heads/main")
-            .and_then(|r| {
-                r.target()
-                    .ok_or_else(|| git2::Error::from_str("main has no target"))
-            })
-            .map_err(|e| {
-                PersistenceError::RepositoryError(format!(
-                    "failed to resolve refs/heads/main: {}",
-                    e
-                ))
-            })?;
-
-        // Resolve origin/main (local remote-tracking branch, no fetch)
-        let origin_main = repo
-            .find_reference("refs/remotes/origin/main")
-            .and_then(|r| {
-                r.target()
-                    .ok_or_else(|| git2::Error::from_str("origin/main has no target"))
-            })
-            .map_err(|e| {
-                PersistenceError::RepositoryError(format!(
-                    "failed to resolve refs/remotes/origin/main: {}",
-                    e
-                ))
-            })?;
-
-        // If both point to same commit → no local-only commits
-        return Ok(local_main != origin_main);
+        Self::repo_has_local_changes(repo)
     }
 
     fn refresh(&self) -> Result<crate::traits::RefreshResult, PersistenceError> {
@@ -887,13 +888,14 @@ impl PersistenceRepository for GitPersistence {
             })?;
             let private_key_path = private_key_path.to_owned();
 
+            let fetch_key_path = private_key_path.clone();
             let mut callbacks = RemoteCallbacks::new();
             callbacks.credentials(move |_url, username_from_url, _allowed_types| {
                 log::info!("Providing SSH credentials for git fetch");
                 Cred::ssh_key(
                     username_from_url.unwrap_or("git"),
                     None,
-                    &private_key_path,
+                    &fetch_key_path,
                     None,
                 )
             });
@@ -915,6 +917,7 @@ impl PersistenceRepository for GitPersistence {
                 })?;
 
             log::info!("Fetch complete; remote tracking branch updated");
+            drop(remote);
 
             let upstream_ref = repo
                 .find_reference("refs/remotes/origin/main")
@@ -987,17 +990,67 @@ impl PersistenceRepository for GitPersistence {
                     ))
                 })?;
 
-            let new_head = repo
-                .head()
-                .and_then(|h| {
-                    h.target()
-                        .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
-                })
+            let head_after_rebase = repo.head().map_err(|e| {
+                PersistenceError::RepositoryError(format!("failed to read HEAD after refresh: {e}"))
+            })?;
+            let head_ref_name_opt = head_after_rebase.name().map(|n| n.to_string());
+            let new_head = head_after_rebase
+                .target()
+                .ok_or_else(|| git2::Error::from_str("HEAD has no target"))
                 .map_err(|e| {
                     PersistenceError::RepositoryError(format!(
                         "failed to read HEAD after refresh: {e}"
                     ))
                 })?;
+
+            if Self::repo_has_local_changes(repo)? {
+                log::info!("Local repository has commits not on origin/main; pushing");
+
+                let push_key_path = private_key_path.clone();
+                let mut push_callbacks = RemoteCallbacks::new();
+                push_callbacks.credentials(move |_url, username_from_url, _allowed_types| {
+                    log::info!("Providing SSH credentials for git push");
+                    Cred::ssh_key(
+                        username_from_url.unwrap_or("git"),
+                        None,
+                        &push_key_path,
+                        None,
+                    )
+                });
+
+                let mut push_options = PushOptions::new();
+                push_options.remote_callbacks(push_callbacks);
+
+                let branch_ref = match head_ref_name_opt {
+                    Some(name) => name,
+                    None => {
+                        log::error!("HEAD reference has no name; cannot push to origin");
+                        return Err(PersistenceError::RepositoryError(
+                            "HEAD reference missing name; cannot push".into(),
+                        ));
+                    }
+                };
+
+                let refspec = format!("{branch_ref}:{branch_ref}");
+                let mut remote = repo.find_remote("origin").map_err(|e| {
+                    log::error!("Unable to locate remote 'origin' for push: {e}");
+                    PersistenceError::RepositoryError(format!(
+                        "failed to find remote 'origin' for push: {e}"
+                    ))
+                })?;
+
+                remote
+                    .push(&[refspec.as_str()], Some(&mut push_options))
+                    .map_err(|e| {
+                        log::error!("Failed to push to origin/main: {e}");
+                        PersistenceError::RepositoryError(format!(
+                            "failed to push to origin/main: {e}"
+                        ))
+                    })?;
+                log::info!("Push to origin/main completed successfully");
+            } else {
+                log::info!("No push required; local matches origin/main");
+            }
 
             old_head != new_head
         };
