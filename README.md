@@ -7,6 +7,7 @@ Share expenses with friends to keep track of who owes who. Data of an expense sh
 ### Dependencies
 - Tauri CLI: `cargo install tauri-cli --version "^2.0" --locked`
 - Tauri dependencies: `cargo tauri info` check 'Environment' section
+- Bun: Package manager or `curl -fsSL https://bun.com/install | bash`
 ### Running
 ```bash
 cargo tauri dev
